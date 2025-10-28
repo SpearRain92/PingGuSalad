@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🐧 핑구네 가계부 분석</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    /* ==============================================
+      NEW THEME & UI KIT
+      ==============================================
+      - Font: Inter (Eng), Noto Sans KR (Kor)
+      - Color Palette: Slate (base), Sky (primary)
+      - Style: Modern, clean, dashboard-like
+    */
+    :root{
+      --primary-color: #0ea5e9; /* Sky 500 */
+      --primary-hover: #0284c7; /* Sky 600 */
+      --background-color: #f1f5f9; /* Slate 100 */
+      --card-background-color: #ffffff;
+      --text-color: #1e293b; /* Slate 800 */
+      --muted-text-color: #64748b; /* Slate 500 */
+      --border-color: #e2e8f0; /* Slate 200 */
+      --border-radius: 0.75rem; /* 12px */
+    }
+    body { 
+      background-color: var(--background-color); 
+      color: var(--text-color); 
+      font-family: 'Inter', 'Noto Sans KR', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .card {
+      background-color: var(--card-background-color);
+      border-radius: var(--border-radius);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      border: 1px solid transparent;
+      text-decoration: none; /* For <a> tags styled as buttons */
+    }
+    .btn-primary {
+      background-color: #0ea5e9; /* Sky 500 - Direct color for visibility */
+      color: white;
+      box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    }
+    .btn-primary:hover {
+      background-color: #0284c7; /* Sky 600 - Direct color for visibility */
+    }
+    .btn-secondary {
+        background-color: #f8fafc;
+        color: #334155;
+        border-color: #e2e8f0;
+    }
+    .btn-secondary:hover {
+        background-color: #f1f5f9;
+    }
+    .btn:disabled {
+      background-color: #94a3b8; /* Slate 400 */
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+    .file-input-wrapper {
+        border: 2px dashed var(--border-color);
+        border-radius: var(--border-radius);
+        padding: 2rem 1rem;
+        text-align: center;
+        transition: border-color 0.2s ease;
+    }
+    .file-input-wrapper.dragover {
+        border-color: var(--primary-color);
+    }
+    .file-input {
+      width: 100%;
+      border: 1px solid var(--border-color);
+      background-color: #f8fafc; /* Slate 50 */
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+    }
+    .file-input::file-selector-button {
+      margin-right: 0.75rem;
+      border: 0;
+      background: var(--primary-color);
+      color: white;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.375rem 0 0 0.375rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background-color 0.2s ease;
+    }
+     .file-input::file-selector-button:hover {
+      background-color: var(--primary-hover);
+    }
+    .tab-btn {
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        color: var(--muted-text-color);
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s ease;
+    }
+    .tab-btn.active {
+        color: var(--primary-color);
+        border-bottom-color: var(--primary-color);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 50;
+    }
+    .modal-content {
+        background-color: white;
+        border-radius: var(--border-radius);
+        width: 90%;
+        max-width: 800px;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+    }
+    .hidden {
+        display: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+  <!-- Header -->
+  <header class="bg-white shadow-sm sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-3">
+          <div class="h-8 w-8 rounded-lg grid place-items-center text-2xl">🐧</div>
+          <h1 class="text-xl font-bold text-slate-800">핑구네 가계부 분석</h1>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+    <!-- Step 1: Upload -->
+    <div id="upload-section" class="card p-6">
+      <div class="flex items-center gap-3">
+        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-sky-500 text-white grid place-items-center font-bold text-lg">1</div>
+        <div>
+          <h2 class="text-lg font-bold">뱅샐현황 엑셀 파일 업로드</h2>
+          <p class="text-sm text-slate-500">분석할 파일을 최대 2개까지 선택하거나 드래그 앤 드롭하세요.</p>
+        </div>
+      </div>
+
+      <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="file-input-wrapper" id="dropzone1">
+          <svg class="mx-auto h-12 w-12 text-slate-300" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <input id="file1" type="file" accept=".xlsx, .csv" class="mt-4 file-input" />
+        </div>
+        <div class="file-input-wrapper" id="dropzone2">
+          <svg class="mx-auto h-12 w-12 text-slate-300" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <input id="file2" type="file" accept=".xlsx, .csv" class="mt-4 file-input" />
+        </div>
+      </div>
+      
+      <div class="mt-6 flex justify-end items-center gap-4">
+        <span id="status" class="text-sm text-slate-500"></span>
+        <button id="runBtn" class="btn btn-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 1.414L10.586 9H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z" clip-rule="evenodd" /></svg>
+          분석 시작
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Results -->
+    <div id="results-section" class="mt-8 hidden">
+       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+            <div class="flex-shrink-0 h-10 w-10 rounded-full bg-sky-500 text-white grid place-items-center text-2xl">🐧</div>
+            <div>
+                <h2 class="text-lg font-bold">분석 결과 대시보드</h2>
+                <p class="text-sm text-slate-500">선택된 파일을 기반으로 생성된 재무 분석 결과입니다.</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="exportBtn" class="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                링크로 저장 및 공유
+            </button>
+            <button id="resetBtn" class="btn btn-secondary">새 파일로 분석하기</button>
+        </div>
+      </div>
+
+      <!-- Financial Status Summary -->
+      <h3 class="text-base font-semibold text-slate-600 mt-6">재무 현황 요약</h3>
+      <div id="summary" class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+
+      <!-- Cashflow Summary -->
+      <h3 class="text-base font-semibold text-slate-600 mt-6">현금흐름 요약 (최근 12개월)</h3>
+      <div id="cashflow-summary" class="mt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+      <!-- Charts -->
+      <div id="charts" class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6"></div>
+      
+      <!-- Detailed Tabs -->
+      <div class="card mt-6">
+        <div class="border-b border-slate-200">
+            <nav id="tab-buttons" class="flex gap-2 p-2">
+                <button class="tab-btn active" data-tab="details">자산/부채 상세</button>
+                <button class="tab-btn" data-tab="cashflow">현금흐름 분석</button>
+                <button class="tab-btn" data-tab="logs">진단 로그</button>
+            </nav>
+        </div>
+        <div class="p-6">
+            <div id="tab-details" class="tab-content active">
+                <div id="result"></div>
+            </div>
+            <div id="tab-cashflow" class="tab-content">
+                <div id="cashflow"></div>
+            </div>
+            <div id="tab-logs" class="tab-content">
+                 <div id="tests" class="text-xs whitespace-pre-wrap p-3 rounded-lg border bg-slate-50 h-64 overflow-auto"></div>
+            </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Transaction Modal -->
+  <div id="transaction-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+          <div class="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h3 id="modal-title" class="text-lg font-semibold"></h3>
+              <button id="close-modal-btn" class="text-slate-400 hover:text-slate-600">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+          </div>
+          <div id="modal-body" class="p-4 overflow-y-auto"></div>
+      </div>
+  </div>
+
+  <!-- LINK SHARING MODAL (FINAL VERSION) -->
+  <div id="link-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+          <div class="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h3 class="text-lg font-semibold">비밀 링크 저장/공유</h3>
+              <button id="close-link-modal-btn" class="text-slate-400 hover:text-slate-600">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+          </div>
+          <div class="p-4 flex-grow overflow-y-auto flex flex-col gap-4">
+              <div id="link-status" class="text-center font-semibold"></div>
+              <div id="link-container"></div>
+               <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg mt-4">
+                  <h4 class="font-bold text-yellow-800">중요: 개인정보 보호 안내</h4>
+                  <p class="text-sm text-yellow-700 mt-1">이 링크는 **누구나 접근할 수 있는 공개 링크**입니다. 링크를 공유하기 전, 민감한 개인정보가 포함되어 있지 않은지 다시 한번 확인해주세요. 이 링크는 익명으로 생성되며, 저희 서버에 어떤 정보도 저장되지 않습니다.</p>
+              </div>
+          </div>
+      </div>
+  </div>
+
+  <script>
+    // ===== UI Enhancements (Drag & Drop, Tabs, Modal) =====
+    function setupUI() {
+        ['dropzone1', 'dropzone2'].forEach((id, index) => {
+            const dropzone = document.getElementById(id);
+            const fileInput = document.getElementById(`file${index + 1}`);
+            dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+            dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+            dropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('dragover');
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+        });
+        const tabButtons = document.getElementById('tab-buttons');
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabButtons.addEventListener('click', (e) => {
+            const target = e.target.closest('.tab-btn');
+            if (!target) return;
+            tabButtons.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            target.classList.add('active');
+            tabContents.forEach(content => content.classList.remove('active'));
+            document.getElementById(`tab-${target.dataset.tab}`).classList.add('active');
+        });
+        const txModal = document.getElementById('transaction-modal');
+        const closeTxModalBtn = document.getElementById('close-modal-btn');
+        closeTxModalBtn.addEventListener('click', () => txModal.classList.add('hidden'));
+        txModal.addEventListener('click', (e) => { if (e.target === txModal) txModal.classList.add('hidden'); });
+        
+        const linkModal = document.getElementById('link-modal');
+        const closeLinkModalBtn = document.getElementById('close-link-modal-btn');
+        closeLinkModalBtn.addEventListener('click', () => linkModal.classList.add('hidden'));
+        linkModal.addEventListener('click', (e) => { if (e.target === linkModal) linkModal.classList.add('hidden'); });
+    }
+
+    // ===== Debug logger =====
+    function __log(...args) {
+      try { const el = document.getElementById('tests'); if (!el) return; const line = args.map(v => { try { return typeof v === 'string' ? v : JSON.stringify(v); } catch { return String(v); } }).join(' '); el.textContent += (el.textContent ? '\n' : '') + `[${new Date().toLocaleTimeString()}] ${line}`; el.scrollTop = el.scrollHeight; } catch (_) { /* noop */ }
+    }
+    window.addEventListener('error', (e) => { __log('❌ window.onerror:', e.message); });
+    window.addEventListener('unhandledrejection', (e) => { __log('❌ unhandledrejection:', (e.reason && e.reason.message) || String(e.reason)); });
+    
+    // ===== Status helper (spinner) =====
+    function setStatus(loading, text=''){
+      const s = document.getElementById('status'); if (!s) return;
+      if (loading){ s.innerHTML = `<svg class="animate-spin h-5 w-5 text-sky-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span class="ml-2">${text}</span>`; } else { s.innerHTML = text ? `<span>${text}</span>` : ''; }
+    }
+
+    // ===== Utilities =====
+    const MIN_AMOUNT = 1000;
+    const formatKRW = (v) => new Intl.NumberFormat('ko-KR').format(v);
+    const fmtWon = (n) => `${formatKRW(Math.round(typeof n === 'number' ? n : Number(n)))}원`;
+    // Use parseNumber helper, it's safer than parseNum used previously
+    const parseNumber = (v) => { if (typeof v === 'number') return v; if (v == null || v === '') return null; const num = Number(String(v).replace(/[^\d.-]/g, '')); return Number.isFinite(num) && !Number.isNaN(num) ? num : null; };
+    async function readFileAsArrayBuffer(file) { if (file && file.arrayBuffer) return await file.arrayBuffer(); return new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = (e) => resolve(e.target.result); fr.onerror = reject; fr.readAsArrayBuffer(file); }); }
+
+    // ===== Section detection =====
+    function findSectionRange(rows) {
+      let startIdx = -1; let headerIdx = -1; let end = rows.length; const normLine = (row) => (row || []).join('').replace(/\s/g, ''); const countEq = (row, s) => row.reduce((c, v) => c + (String(v).trim() === s ? 1 : 0), 0);
+      for (let i = 0; i < rows.length; i++) { const row = rows[i] || []; const line = normLine(row); if (startIdx === -1) { if (line.includes('3.재무현황') || (line.includes('자산') && line.includes('부채'))) startIdx = i; } if (startIdx !== -1) { const hn = countEq(row, '항목'); const pn = countEq(row, '상품명'); const mn = countEq(row, '금액'); if (hn >= 2 && pn >= 2 && mn >= 2) headerIdx = i; if (line.includes('총자산') || line.includes('순자산') || line.includes('4.보험현황')) { end = i; break; } } }
+      if (startIdx === -1) startIdx = 0;
+      if (headerIdx !== -1) return { start: headerIdx + 1, end, headerRowIndex: headerIdx };
+      return { start: startIdx + 1, end, headerRowIndex: -1 };
+    }
+    function findHeaderCols(row) { const cells = row.map((c) => String(c).trim()); const idxs = (label) => cells.map((c, i) => (c === label ? i : -1)).filter((i) => i !== -1); const hIdx = idxs('항목'); const pIdx = idxs('상품명'); const mIdx = idxs('금액'); if (hIdx.length >= 2 && pIdx.length >= 2 && mIdx.length >= 2) { return { aCat: hIdx[0], aProd: pIdx[0], aAmt: mIdx[0], lCat: hIdx[hIdx.length - 1], lProd: pIdx[pIdx.length - 1], lAmt: mIdx[mIdx.length - 1] }; } return null; }
+
+    // ===== Core parsing (자산/부채) =====
+    function parseFinancialStatus(rows) {
+      const assets = []; const liabilities = [];
+      const range = findSectionRange(rows);
+      const headerRow = range.headerRowIndex !== -1 ? rows[range.headerRowIndex] : (rows[range.start - 1] || []);
+      const cols = findHeaderCols(headerRow) || { aCat: 0, aProd: 1, aAmt: 3, lCat: 4, lProd: 5, lAmt: 7 };
+      let curAssetCategory = ''; let curLiabCategory = '';
+      for (let i = range.start; i < range.end; i++) {
+        const r = rows[i] || [];
+        const aCatCell = String(r[cols.aCat] ?? '').trim();
+        const aProdCell = String(r[cols.aProd] ?? '').trim();
+        const aAmt = parseNumber(r[cols.aAmt]);
+        if (aCatCell && !['자산', '부채', '항목'].includes(aCatCell)) curAssetCategory = aCatCell;
+        if (aProdCell && aAmt != null && aAmt >= MIN_AMOUNT) assets.push({ 항목명: curAssetCategory || '기타', 상품명: aProdCell, 금액: aAmt });
+        const lCatCell = String(r[cols.lCat] ?? '').trim();
+        const lProdCell = String(r[cols.lProd] ?? '').trim();
+        const lAmt = parseNumber(r[cols.lAmt]);
+        if (lCatCell && !['자산', '부채', '항목'].includes(lCatCell)) curLiabCategory = lCatCell;
+        if (lProdCell && lAmt != null && lAmt >= MIN_AMOUNT) liabilities.push({ 항목명: curLiabCategory || '기타', 상품명: lProdCell, 금액: lAmt });
+      }
+      return { assets, liabilities };
+    }
+
+    // ===== Sheet picking (IMPROVED) =====
+    function pickBangsaelSheet(workbook, sheetName) {
+        if (!workbook || !workbook.SheetNames) return null;
+        if (workbook.Sheets[sheetName]) return workbook.Sheets[sheetName];
+        
+        const normalizedSheetName = sheetName.replace(/\s/g, '');
+        const foundName = (workbook.SheetNames || []).find((n) => n.replace(/\s/g, '').includes(normalizedSheetName));
+        if(foundName) {
+            __log(`✅ '${sheetName}' 시트를 '${foundName}'(이)라는 이름으로 찾았습니다.`);
+            return workbook.Sheets[foundName];
+        }
+
+        if (workbook.SheetNames.length === 1) {
+            __log(`ℹ️ '${sheetName}'을(를) 찾지 못했지만, 시트가 하나뿐이므로 '${workbook.SheetNames[0]}'(을)를 대신 사용합니다.`);
+            return workbook.Sheets[workbook.SheetNames[0]];
+        }
+
+        __log(`⚠️ '${sheetName}' 시트를 찾지 못했습니다.`);
+        return null;
+    }
+
+    // ===== Grouping & tables =====
+    function groupByCategory(items) { const map = new Map(); for (const it of items) { const key = it.항목명 || '기타'; if (!map.has(key)) map.set(key, []); map.get(key).push(it); } return map; }
+
+    function renderGroupedTable(title, items) {
+        const groups = groupByCategory(items);
+        let html = `<h3 class="text-lg font-semibold mb-4">${title}</h3>`;
+        if (items.length === 0) { return html + `<div class="text-slate-500 p-4 border rounded-lg bg-slate-50">데이터 없음</div>`; }
+        html += `<div class="space-y-4">`;
+        for (const [cat, rows] of groups.entries()) {
+            const subtotal = rows.reduce((s, r) => s + (r.금액 || 0), 0);
+            html += `
+            <div class="border border-slate-200 rounded-lg overflow-hidden">
+                <div class="px-4 py-2 bg-slate-50 font-semibold flex justify-between items-center">
+                    <span>${cat}</span>
+                    <span class="text-sm text-slate-500 font-medium">소계: ${fmtWon(subtotal)}</span>
+                </div>
+                <table class="w-full text-sm">
+                    <tbody>
+                    ${rows.map((r) => `
+                        <tr class="border-t border-slate-200">
+                            <td class="px-4 py-2">${r.상품명}</td>
+                            <td class="px-4 py-2 text-right font-medium">${fmtWon(r.금액)}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        }
+        return html + `</div>`;
+    }
+
+    function renderAssetGroupedTableWithCheckboxes(title, items, selectedSet) {
+        const groups = groupByCategory(items);
+        let html = `<h3 class="text-lg font-semibold mb-2">${title}</h3><p class="text-sm text-slate-500 mb-4">그래프 및 요약에 포함할 항목을 선택하세요.</p>`;
+        if (items.length === 0) { return html + `<div class="text-slate-500 p-4 border rounded-lg bg-slate-50">데이터 없음</div>`; }
+        html += `<div class="space-y-4">`;
+        for (const [cat, rows] of groups.entries()) {
+            const subtotal = rows.reduce((s, r) => s + (r.금액 || 0), 0);
+             html += `
+            <div class="border border-slate-200 rounded-lg overflow-hidden">
+                <div class="px-4 py-2 bg-slate-50 font-semibold flex justify-between items-center">
+                    <span>${cat}</span>
+                    <span class="text-sm text-slate-500 font-medium">소계: ${fmtWon(subtotal)}</span>
+                </div>
+                <table class="w-full text-sm">
+                    <tbody>
+                    ${rows.map(r => `
+                        <tr class="border-t border-slate-200">
+                            <td class="px-4 py-2 w-full">
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <input type="checkbox" class="asset-select h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-500" data-id="${r.id}" ${selectedSet.has(r.id) ? 'checked' : ''} />
+                                    <span>${r.상품명}</span>
+                                </label>
+                            </td>
+                            <td class="px-4 py-2 text-right font-medium whitespace-nowrap">${fmtWon(r.금액)}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        }
+        return html + `</div>`;
+    }
+
+    // ===== Charts helpers =====
+    function computeCategoryTotals(items, topN = 10) { const totals = new Map(); for (const it of items) { const key = it.항목명 || '기타'; totals.set(key, (totals.get(key) || 0) + (it.금액 || 0)); } const sorted = [...totals.entries()].sort((a, b) => b[1] - a[1]); if (sorted.length > topN) { const head = sorted.slice(0, topN); const tail = sorted.slice(topN); const etcSum = tail.reduce((s, [, v]) => s + v, 0); head.push([`기타(${tail.length}개)`, etcSum]); return head; } return sorted; }
+
+    let charts = { pie: null, barAsset: null, barLiab: null, cfMonthly: null, cfCat: null };
+    function destroyCharts() { for (const k of Object.keys(charts)) { if (charts[k]) { charts[k].destroy(); charts[k] = null; } } }
+
+    function renderSummary(assets, liabilities, selectedBased = false) {
+      const assetTotal = assets.reduce((s, r) => s + (r.금액 || 0), 0);
+      const liabTotal = liabilities.reduce((s, r) => s + (r.금액 || 0), 0);
+      const netWorth = assetTotal - liabTotal;
+      const card = (label, value, icon) => `
+        <div class="card p-5">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-medium text-slate-500">${label}</p>
+            ${icon}
+          </div>
+          <p class="text-2xl md:text-3xl font-bold mt-2">${fmtWon(value)}</p>
+        </div>`;
+      const assetLabel = selectedBased ? '선택 자산 합계' : '총 자산';
+      const netLabel = selectedBased ? '순자산 (선택 기준)' : '총 순자산';
+      const assetIcon = `<div class="h-8 w-8 rounded-full bg-emerald-100 text-emerald-500 grid place-items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.418zM7.25 12.25a2.5 2.5 0 00-1.134 0v-1.698c.22.07.412.164.567.267v1.431zm3.5 0a2.5 2.5 0 001.134 0v-1.431c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.701 0zM10 2a8 8 0 100 16 8 8 0 000-16zm0 14a6 6 0 110-12 6 6 0 010 12z" /></svg></div>`;
+      const liabIcon = `<div class="h-8 w-8 rounded-full bg-rose-100 text-rose-500 grid place-items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" /></svg></div>`;
+      const netIcon = `<div class="h-8 w-8 rounded-full bg-sky-100 text-sky-500 grid place-items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg></div>`;
+      document.getElementById('summary').innerHTML = [ card(assetLabel, assetTotal, assetIcon), card('총 부채', liabTotal, liabIcon), card(netLabel, netWorth, netIcon) ].join('');
+    }
+
+    function renderCharts(assets, liabilities) {
+      const chartsEl = document.getElementById('charts');
+      if (!window.Chart) { chartsEl.innerHTML = '<p>Chart.js 로딩 실패</p>'; return; }
+      const assetTotal = assets.reduce((s, r) => s + (r.금액 || 0), 0);
+      const liabTotal = liabilities.reduce((s, r) => s + (r.금액 || 0), 0);
+      chartsEl.innerHTML = `
+        <div class="card p-4 lg:col-span-1"><h3 class="font-semibold mb-2">자산 vs 부채</h3><div class="h-64"><canvas id="pieTotal"></canvas></div></div>
+        <div class="card p-4 lg:col-span-2"><h3 class="font-semibold mb-2">항목별 자산 현황</h3><div class="h-64">${assets.length ? '<canvas id="barAsset"></canvas>' : '<p class="text-slate-500">데이터 없음</p>'}</div></div>
+      `;
+      destroyCharts();
+      Chart.defaults.font.family = "'Inter', 'Noto Sans KR', sans-serif";
+      charts.pie = new Chart(document.getElementById('pieTotal').getContext('2d'), { type: 'doughnut', data: { labels: ['자산', '부채'], datasets: [{ data: [assetTotal, liabTotal], backgroundColor:['#10b981', '#f43f5e'], borderWidth:0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${fmtWon(ctx.parsed)}` } } }, cutout: '60%' } });
+      if (assets.length) {
+        const aPairs = computeCategoryTotals(assets);
+        charts.barAsset = new Chart(document.getElementById('barAsset').getContext('2d'), { type: 'bar', data: { labels: aPairs.map(([k])=>k), datasets: [{ label: '금액', data: aPairs.map(([,v])=>v), backgroundColor:'#38bdf8', borderRadius:4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { callback: (v) => `${(v/10000).toLocaleString()}만원` } } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${fmtWon(ctx.parsed.x)}` } } } } });
+      }
+    }
+
+    // ===== Cashflow & Transaction Parsing Logic =====
+    function findCashflowRange(rows){
+      let start = -1, end = rows.length; 
+      const normLine = (row) => (row||[]).join('').replace(/\s/g,'');
+      for(let i=0; i < rows.length; i++){
+        const line = normLine(rows[i]);
+        if(start === -1 && (line.includes('현금흐름현황'))) {
+            start = i;
+        }
+        else if(start !== -1 && (line.includes('3.재무현황') || line.includes('재무현황'))) { 
+            end = i; 
+            break; 
+        }
+      }
+      if(start === -1) {
+          __log("⚠️ '뱅샐현황' 시트에서 '현금흐름' 섹션을 찾지 못했습니다.");
+          return null;
+      }
+      return { start: start + 1, end };
+    }
+
+    function parseMonthLike(val) {
+        if (!val) return null;
+        if (val instanceof Date) { return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, '0')}`; }
+        // Handle Excel date numbers
+        if (typeof val === 'number' && val > 30000 && val < 60000) { 
+            const date = XLSX.SSF.parse_date_code(val); // Use XLSX date parsing
+            if (date) { return `${date.y}-${String(date.m).padStart(2, '0')}`; }
+        }
+        const s = String(val).trim();
+        
+        // YYYY-MM, YYYY.MM, YYYY/MM, YYYY MM
+        let m = s.match(/(20\d{2})[.\/\s-]+(\d{1,2})/);
+        if (m) { return `${m[1]}-${String(m[2]).padStart(2, '0')}`; }
+        
+        // YYYY년 M월
+        m = s.match(/(20\d{2})\s*년\s*(\d{1,2})\s*월/);
+        if (m) { return `${m[1]}-${String(m[2]).padStart(2, '0')}`; }
+
+        // YY-MM, YY.MM, YY/MM, YY MM
+        m = s.match(/(\d{2})[.\/\s-]+(\d{1,2})/);
+        if (m) { return `20${m[1]}-${String(m[2]).padStart(2, '0')}`; }
+        
+        // YY년 M월
+        m = s.match(/(\d{2})\s*년\s*(\d{1,2})\s*월/);
+        if (m) { return `20${m[1]}-${String(m[2]).padStart(2, '0')}`; }
+
+        return null;
+    }
+
+    // ===== [REVISED] parseCashflowMatrix: Using User Provided Logic =====
+    function parseCashflowMatrix(rows, s, e) {
+        // 1) 월 헤더 찾기
+        let monthsInfo = null;
+        for (let i = s; i < Math.min(e, s + 40); i++) {
+            const row = rows[i] || [];
+            let months = [];
+            for (let j = 0; j < row.length; j++) {
+                const ym = parseMonthLike(row[j]);
+                if (ym) { months.push({ col: j, month: ym }); }
+            }
+            if (months.length >= 2) { 
+                monthsInfo = { headerRowIndex: i, monthMap: months }; 
+                break; 
+            }
+        }
+        if (!monthsInfo) { __log("⚠️ 현금흐름 섹션에서 월(month) 헤더를 찾지 못했습니다."); return null; }
+        __log(`✅ 현금흐름 월 헤더를 ${monthsInfo.headerRowIndex}행에서 찾았습니다.`);
+
+        const monthColMap = new Map(monthsInfo.monthMap.map(m => [m.month, m.col]));
+
+        // 2) '월수입총계' / '월지출총계' 구간 및 행 찾기
+        let incomeTotalRow, expenseTotalRow, incomeCatEndIdx = -1, expenseCatStartIdx = -1, expenseCatEndIdx = -1;
+        for (let i = monthsInfo.headerRowIndex + 1; i < e; i++) {
+            const row = rows[i] || [];
+            // Check for potential null cells before joining
+            const normalizedRowContent = row.map(cell => cell ?? '').join('').replace(/\s/g, ''); 
+            if (normalizedRowContent.includes('월수입총계')) {
+                incomeTotalRow = row; 
+                incomeCatEndIdx = i;           // 수입 카테고리 끝
+                expenseCatStartIdx = i + 1;    // 지출 카테고리 시작
+            } else if (normalizedRowContent.includes('월지출총계')) {
+                expenseTotalRow = row; 
+                expenseCatEndIdx = i;          // 지출 카테고리 끝
+                break;
+            }
+        }
+        if (!incomeTotalRow || !expenseTotalRow) { __log("⚠️ '월수입총계' 또는 '월지출총계' 행을 찾지 못했습니다."); return null; }
+        __log("✅ '월수입총계' 및 '월지출총계' 행을 찾았습니다.");
+        __log(`   - 수입 구간: ${monthsInfo.headerRowIndex + 1} ~ ${incomeCatEndIdx-1}`);
+        __log(`   - 지출 구간: ${expenseCatStartIdx} ~ ${expenseCatEndIdx-1}`);
+        __log(`   - 월수입총계 행: [${incomeTotalRow.slice(0, 5).join(', ')}, ...]`);
+        __log(`   - 월지출총계 행: [${expenseTotalRow.slice(0, 5).join(', ')}, ...]`);
+
+
+        // 3) 월별 합계 계산 유틸 (카테고리 구간 합산)
+        const safeParseNumber = (v) => {
+            const num = parseNumber(v); // Use the robust helper
+            return num === null ? 0 : num; // Return 0 if parsing fails
+        };
+        
+        const sumColOverRange = (col, startIdx, endIdx) => {
+            let s = 0;
+            for (let r = startIdx; r < endIdx; r++) {
+                // Defensive check for row existence
+                if (!rows[r]) continue; 
+                const v = safeParseNumber(rows[r][col]);
+                // Log individual category values being summed for debugging
+                 if (Math.abs(v) > 0 && r < startIdx + 5) { // Log first 5 non-zero values
+                    __log(`      -> Summing R${r}, C${col}: ${rows[r][col]} -> ${v}`);
+                 }
+                s += Math.abs(v); // Sum absolute values for both income/expense categories
+            }
+             __log(`   -> Col ${col} Sum (${startIdx}-${endIdx-1}): ${s}`);
+            return s;
+        };
+
+        // 4) 월별 수입/지출: 총계 행이 0(또는 null)이면 카테고리 합으로 대체
+        const monthlyData = [];
+        for (const [month, monthCol] of monthColMap.entries()) {
+            const incomeFromTotal  = safeParseNumber(incomeTotalRow?.[monthCol]);
+            const expenseFromTotal = safeParseNumber(expenseTotalRow?.[monthCol]);
+            __log(`   - ${month} (Col ${monthCol}): Raw Total Income=${incomeTotalRow?.[monthCol]}(${incomeFromTotal}), Raw Total Expense=${expenseTotalRow?.[monthCol]}(${expenseFromTotal})`);
+
+
+            const incomeFromCats  = sumColOverRange(monthCol, monthsInfo.headerRowIndex + 1, incomeCatEndIdx);
+            const expenseFromCats = sumColOverRange(monthCol, expenseCatStartIdx, expenseCatEndIdx);
+             __log(`   - ${month} (Col ${monthCol}): Sum Cats Income=${incomeFromCats}, Sum Cats Expense=${expenseFromCats}`);
+
+
+            const incomeFinal  = (incomeFromTotal && incomeFromTotal !== 0) ? incomeFromTotal : incomeFromCats;
+            // Expense should always be positive in the final data
+            const expenseFinal = (expenseFromTotal && expenseFromTotal !== 0) ? Math.abs(expenseFromTotal) : expenseFromCats; // Use positive category sum
+
+            // 총계가 0이라 카테고리 합을 사용한 경우 로그로 알려줌
+            if ((incomeFromTotal === 0 && incomeFromCats !== 0)) {
+                 __log(`ℹ️ '${month}' 수입 총계가 0이라 카테고리 합(${incomeFinal})으로 대체.`);
+            }
+             if ((expenseFromTotal === 0 && expenseFromCats !== 0)) {
+                 __log(`ℹ️ '${month}' 지출 총계가 0이라 카테고리 합(${expenseFinal})으로 대체.`);
+            }
+
+            monthlyData.push({
+                ym: month,
+                income: Math.round(incomeFinal || 0),
+                expense: Math.round(expenseFinal || 0),
+            });
+        }
+        __log('📊 월별 총 수입/지출 계산 완료 (최신 3개월):', JSON.stringify(monthlyData.slice(-3)));
+
+        // 5) 카테고리 집계 (기존 로직 + safeParseNumber)
+        const getFirstMeaningfulCellIndex = (row) => {
+            if(!row) return -1;
+            for(let i=0; i < row.length; i++) {
+                // Ensure cell is not null/undefined before trimming
+                if(row[i] != null && String(row[i]).trim() !== '') return i; 
+            }
+            return -1;
+        };
+        const processCategories = (startIdx, endIdx) => {
+            const catMap = new Map();
+            if (startIdx === -1 || endIdx === -1) return catMap;
+
+            for (let i = startIdx; i < endIdx; i++) {
+                const row = rows[i] || [];
+                const labelIndex = getFirstMeaningfulCellIndex(row);
+                if (labelIndex === -1) continue;
+
+                let name = String(row[labelIndex]).trim();
+                if (!name || name.includes('총계')) continue;
+
+                let categoryTotal = 0;
+                for (const [, col] of monthColMap.entries()) {
+                    // Use safeParseNumber here as well
+                    const monthlyValue = safeParseNumber(row[col]); 
+                    categoryTotal += Math.abs(monthlyValue); // Sum absolute values
+                }
+                if (Math.abs(categoryTotal) >= MIN_AMOUNT) {
+                    // Always add as positive value
+                    catMap.set(name, (catMap.get(name) || 0) + Math.round(Math.abs(categoryTotal)));
+                }
+            }
+            return catMap;
+        };
+
+        const incomeCatMap = processCategories(monthsInfo.headerRowIndex + 1, incomeCatEndIdx);
+        const expenseCatMap = processCategories(expenseCatStartIdx, expenseCatEndIdx);
+
+        __log(`✅ 수입 카테고리 ${incomeCatMap.size}개, 지출 카테고리 ${expenseCatMap.size}개를 집계했습니다.`);
+        return { monthly: monthlyData, incomeCategories: incomeCatMap, expenseCategories: expenseCatMap };
+    }
+
+
+    function parseCashflow(rows){
+      const range = findCashflowRange(rows); if(!range){ return null; }
+      // Use XLSX.utils.sheet_to_json WITHOUT raw: true for better type handling
+      // const rows = XLSX.utils.sheet_to_json(sheetFS, { header:1 }); 
+      // ^^^ This needs to happen in the main run() function
+
+      const mx = parseCashflowMatrix(rows, range.start, range.end);
+      if (mx) {
+          __log("✅ 현금흐름 데이터 파싱 성공.");
+          return mx;
+      }
+      return null;
+    }
+    function last12MonthsSorted(allMonths){
+        if(!allMonths.length) return []; 
+        const toNum=(ym)=>{ const [y,m]=ym.split('-'); return y*100+Number(m); };
+        const sorted = Array.from(new Set(allMonths)).sort((a,b)=>toNum(b)-toNum(a)).slice(0,12).sort((a,b)=>toNum(a)-toNum(b));
+        return sorted;
+    }
+    function mergeCashflowResults(list){
+      const monthlyMap = new Map(); const incomeCatMap = new Map(); const expenseCatMap = new Map();
+      for(const r of list){ 
+            if (!r) continue;
+            for(const m of r.monthly||[]){ const cur = monthlyMap.get(m.ym)||{income:0, expense:0}; cur.income += m.income||0; cur.expense += m.expense||0; monthlyMap.set(m.ym, cur); } 
+            for(const [k,v] of (r.incomeCategories||new Map()).entries()){ incomeCatMap.set(k, (incomeCatMap.get(k)||0)+v); }
+            for(const [k,v] of (r.expenseCategories||new Map()).entries()){ expenseCatMap.set(k, (expenseCatMap.get(k)||0)+v); }
+        }
+      const months = [...monthlyMap.keys()]; const window = last12MonthsSorted(months);
+      const monthly = window.map(ym=>({ ym, income:(monthlyMap.get(ym)||{income:0}).income, expense:(monthlyMap.get(ym)||{expense:0}).expense }));
+      return { monthly, incomeCategories: incomeCatMap, expenseCategories: expenseCatMap };
+    }
+    function parseTransactions(rows) {
+        let headerRowIndex = rows.findIndex(row => row.includes('날짜') && row.includes('대분류') && row.includes('금액') && row.includes('타입'));
+        if (headerRowIndex === -1) {
+             // Try finding headers differently for robustness
+            headerRowIndex = rows.findIndex(row => row && row.length > 4 && String(row[0]).includes('날짜') && String(row[3]).includes('대분류'));
+             if (headerRowIndex === -1) {
+                 __log("⚠️ '가계부 내역' 시트에서 헤더(날짜, 대분류 등)를 찾지 못했습니다.");
+                 return [];
+             }
+        }
+
+        const headers = rows[headerRowIndex].map(h => String(h || '').trim()); // Normalize headers
+        const dateIdx = headers.indexOf('날짜');
+        const catIdx = headers.indexOf('대분류');
+        const contentIdx = headers.indexOf('내용');
+        const amountIdx = headers.indexOf('금액');
+        const typeIdx = headers.indexOf('타입');
+
+        // Check if essential headers were found
+        if ([dateIdx, catIdx, amountIdx, typeIdx].includes(-1)) {
+             __log(`⚠️ '가계부 내역' 필수 헤더 누락: 날짜(${dateIdx}), 대분류(${catIdx}), 금액(${amountIdx}), 타입(${typeIdx})`);
+             return [];
+        }
+        
+        const transactions = [];
+        for (let i = headerRowIndex + 1; i < rows.length; i++) {
+            const row = rows[i];
+            // Ensure row is an array and has enough elements
+            if (!Array.isArray(row) || row.length <= Math.max(dateIdx, catIdx, contentIdx, amountIdx, typeIdx)) continue; 
+
+            const amount = parseNumber(row[amountIdx]);
+            if (amount == null) continue; // Skip if amount cannot be parsed
+            
+            let date = String(row[dateIdx] || '');
+            // Attempt to parse Excel date numbers if applicable
+             if (typeof row[dateIdx] === 'number' && row[dateIdx] > 30000) {
+                 const d = XLSX.SSF.parse_date_code(row[dateIdx]);
+                 if (d) date = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+             } else if (row[dateIdx] instanceof Date) {
+                 date = row[dateIdx].toISOString().split('T')[0];
+             }
+            // Basic validation for date format (YYYY-MM-DD) - might need refinement
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                // Try parsing common variations if needed, or skip
+                 __log(`   - Skipping transaction row ${i}: Invalid date format "${row[dateIdx]}"`);
+                 continue; 
+            }
+
+
+            transactions.push({
+                date: date,
+                category: String(row[catIdx] || '미분류').trim(), // Default category
+                content: String(row[contentIdx] || '').trim(),
+                amount: amount,
+                type: String(row[typeIdx] || '미분류').trim() // Default type
+            });
+        }
+        __log(`✅ '가계부 내역' 시트에서 ${transactions.length}개의 거래를 파싱했습니다.`);
+        return transactions;
+    }
+
+    // ===== Rendering Logic =====
+    function renderCashflowSummary(cf) {
+        const wrap = document.getElementById('cashflow-summary');
+        if (!wrap) return;
+        if (!cf || !cf.monthly || cf.monthly.length === 0 || cf.monthly.every(m => m.income === 0 && m.expense === 0)) {
+            wrap.innerHTML = `<div class="card p-4 text-slate-500 md:col-span-4 lg:col-span-4">현금흐름 데이터를 찾을 수 없거나, 분석 기간이 너무 짧습니다. [진단 로그] 탭에서 상세 원인을 확인하세요.</div>`;
+            return;
+        }
+        const sumIncome = cf.monthly.reduce((s, m) => s + m.income, 0);
+        const sumExpense = cf.monthly.reduce((s, m) => s + m.expense, 0);
+        const avgIncome = sumIncome / cf.monthly.length;
+        const avgExpense = sumExpense / cf.monthly.length;
+        const expenseRatio = avgIncome > 0 ? (avgExpense / avgIncome * 100).toFixed(1) : 0;
+        const netRatio = avgIncome > 0 ? ((avgIncome - avgExpense) / avgIncome * 100).toFixed(1) : 0;
+
+        const card = (label, value, valueClass = '', subtitle = '') => `
+            <div class="card p-4">
+                <p class="text-sm text-slate-500 truncate">${label}</p>
+                <div class="flex items-baseline gap-2">
+                    <p class="text-xl font-bold mt-1 ${valueClass}">${value}</p>
+                    ${subtitle ? `<p class="text-sm font-semibold ${valueClass}">${subtitle}</p>` : ''}
+                </div>
+            </div>`;
+
+        wrap.innerHTML = [
+            card('월평균 수입', fmtWon(avgIncome), 'text-emerald-600'),
+            card('월평균 지출', fmtWon(avgExpense), 'text-rose-600', `(${expenseRatio}%)`),
+            card('평균 순현금흐름', fmtWon(avgIncome - avgExpense), '', `(${netRatio}%)`),
+            card('분석 기간', `${cf.monthly.length}<span class="text-sm font-semibold ml-1">개월</span>`, '')
+        ].join('');
+    }
+    function renderCashflowDetails(cf){
+        const wrap = document.getElementById('cashflow');
+        if (!wrap) return;
+        if (!cf || !cf.monthly || cf.monthly.length === 0 || cf.monthly.every(m => m.income === 0 && m.expense === 0)) {
+            wrap.innerHTML = `<div class="text-slate-500 p-4 border rounded-lg bg-slate-50">현금흐름 데이터를 찾을 수 없습니다.</div>`;
+            return;
+        }
+        
+        const expenseCatPairs = [...(cf.expenseCategories||new Map()).entries()].sort((a,b)=>b[1]-a[1]);
+        const totalExpense = expenseCatPairs.reduce((sum, [, value]) => sum + value, 0);
+
+        let html = `
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="card p-4"><h3 class="font-semibold mb-2">월별 현금흐름</h3><div class="h-72 relative"><canvas id="cfMonthly"></canvas></div></div>
+                <div class="card p-4"><h3 class="font-semibold mb-2">상위 지출 카테고리 (클릭 가능)</h3><div class="h-72 relative"><canvas id="cfCat"></canvas></div></div>
+            </div>
+             <div class="mt-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold">월별 상세 내역</h3>
+                    <select id="month-selector" class="bg-white border border-slate-300 rounded-md py-1 px-2 text-sm">
+                        <option value="overall">전체 기간</option>
+                        ${cf.monthly.map(m => `<option value="${m.ym}">${m.ym}</option>`).join('')}
+                    </select>
+                </div>
+                <div id="monthly-category-summary"></div>
+            </div>
+        `;
+        wrap.innerHTML = html;
+
+        renderCategoryTables('overall');
+
+        const top8CatPairs = expenseCatPairs.slice(0, 8);
+        
+        if (charts.cfMonthly) charts.cfMonthly.destroy();
+        charts.cfMonthly = new Chart(document.getElementById('cfMonthly').getContext('2d'), {type:'bar',data:{labels:cf.monthly.map(m=>m.ym.slice(2)),datasets:[{label:'수입',data:cf.monthly.map(m=>m.income),backgroundColor:'#10b981', borderRadius:4},{label:'지출',data:cf.monthly.map(m=>m.expense),backgroundColor:'#f43f5e', borderRadius:4}]},options:{responsive:true, maintainAspectRatio: false, scales:{y:{ticks:{callback:(v)=>`${(v/10000).toLocaleString()}만`}}}}});
+        
+        const catChartCanvas = document.getElementById('cfCat').getContext('2d');
+        if (charts.cfCat) charts.cfCat.destroy();
+        charts.cfCat = new Chart(catChartCanvas, {
+            type:'doughnut',
+            data:{labels:top8CatPairs.map(([k])=>k), datasets:[{data:top8CatPairs.map(([,v])=>v), backgroundColor:['#f43f5e','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#06b6d4'], borderWidth:0}]},
+            options:{
+                responsive:true, maintainAspectRatio: false,
+                onClick: (event, elements) => {
+                    if (elements.length > 0) {
+                        const chart = elements[0].element.$context.chart;
+                        const category = chart.data.labels[elements[0].index];
+                        showTransactionModal(category, '지출');
+                    }
+                },
+                plugins:{
+                    legend:{ position:'bottom', labels:{ padding:10 }},
+                    tooltip:{ 
+                        callbacks:{ 
+                            label: (ctx) => {
+                                const value = ctx.parsed;
+                                const percentage = totalExpense > 0 ? ((value / totalExpense) * 100).toFixed(1) : 0;
+                                return `${ctx.label}: ${fmtWon(value)} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    function renderCategoryTables(selectedMonth) {
+        const container = document.getElementById('monthly-category-summary');
+        if (!container || !window.__cf) return;
+        
+        let incomeData, expenseData;
+        
+        if (selectedMonth === 'overall') {
+            incomeData = window.__cf.incomeCategories || new Map();
+            expenseData = window.__cf.expenseCategories || new Map();
+        } else {
+            incomeData = new Map();
+            (window.__transactions || [])
+                .filter(tx => parseMonthLike(tx.date) === selectedMonth && tx.type === '수입')
+                .forEach(tx => incomeData.set(tx.category, (incomeData.get(tx.category) || 0) + tx.amount));
+            expenseData = new Map();
+            (window.__transactions || [])
+                .filter(tx => parseMonthLike(tx.date) === selectedMonth && tx.type === '지출')
+                .forEach(tx => expenseData.set(tx.category, (expenseData.get(tx.category) || 0) + Math.abs(tx.amount)));
+        }
+
+        const incomeCatPairs = [...incomeData.entries()].sort((a,b)=>b[1]-a[1]);
+        const expenseCatPairs = [...expenseData.entries()].sort((a,b)=>b[1]-a[1]);
+        const totalIncome = incomeCatPairs.reduce((sum, [, value]) => sum + value, 0);
+        const totalExpense = expenseCatPairs.reduce((sum, [, value]) => sum + value, 0);
+
+        const createTable = (title, dataPairs, total, type, colorClass) => {
+            if(dataPairs.length === 0 && selectedMonth !== 'overall') return `<div class="card"><div class="px-4 py-3 bg-slate-50 font-semibold">${title}</div><div class="p-4 text-slate-500">해당 월의 상세 내역이 없습니다.</div></div>`;
+            if(dataPairs.length === 0) return '';
+            
+            return `
+            <div class="card overflow-hidden">
+                <div class="px-4 py-3 bg-slate-50 font-semibold">${title} (클릭 가능)</div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500">
+                            <tr>
+                                <th class="px-4 py-2">카테고리</th>
+                                <th class="px-4 py-2 text-right">금액</th>
+                                <th class="px-4 py-2 text-right">비율</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${dataPairs.map(([category, amount]) => `
+                                <tr class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer category-row" data-category="${category}" data-type="${type}">
+                                    <td class="px-4 py-3 font-medium whitespace-nowrap">${category}</td>
+                                    <td class="px-4 py-3 text-right ${colorClass}">${fmtWon(amount)}</td>
+                                    <td class="px-4 py-3 text-right font-semibold">${total > 0 ? ((amount / total) * 100).toFixed(1) : 0}%</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                        <tfoot class="bg-slate-100 font-bold">
+                            <tr class="border-t-2 border-slate-300">
+                                <td class="px-4 py-3">합계</td>
+                                <td class="px-4 py-3 text-right ${colorClass}">${fmtWon(total)}</td>
+                                <td class="px-4 py-3 text-right">100.0%</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>`;
+        }
+
+        container.innerHTML = `
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                ${createTable('수입 카테고리 요약', incomeCatPairs, totalIncome, '수입', 'text-emerald-600')}
+                ${createTable('지출 카테고리 요약', expenseCatPairs, totalExpense, '지출', 'text-rose-600')}
+            </div>
+        `;
+    }
+
+    function showTransactionModal(category, type) {
+        if (!window.__transactions || window.__transactions.length === 0) {
+            __log("거래 내역 데이터가 없습니다. '가계부 내역' 시트가 파일에 포함되어 있는지 확인하세요.");
+            const btn = document.querySelector(`[data-category="${category}"]`);
+            if(btn) {
+                btn.style.backgroundColor = '#fee2e2';
+                setTimeout(() => { btn.style.backgroundColor = ''}, 500);
+            }
+            return;
+        }
+        
+        const selectedMonth = document.getElementById('month-selector')?.value || 'overall'; // Handle potential null
+        const typeStr = type === '수입' ? '수입' : '지출';
+
+        let filteredTx = window.__transactions.filter(tx => {
+            const txMonth = parseMonthLike(tx.date);
+            const monthMatch = (selectedMonth === 'overall') || (txMonth === selectedMonth);
+            return tx.category === category && tx.type === typeStr && monthMatch;
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        const modal = document.getElementById('transaction-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalBody = document.getElementById('modal-body');
+
+        if (!modal || !modalTitle || !modalBody) return; // Defensive check
+
+        modalTitle.textContent = `'${category}' ${type} 내역 (${filteredTx.length}건)`;
+        
+        if (filteredTx.length === 0) {
+            modalBody.innerHTML = '<p class="text-slate-500">해당 카테고리의 거래 내역이 없습니다.</p>';
+        } else {
+             modalBody.innerHTML = `
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-50 text-slate-500">
+                        <tr>
+                            <th class="px-4 py-2">날짜</th>
+                            <th class="px-4 py-2">내용</th>
+                            <th class="px-4 py-2 text-right">금액</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filteredTx.map(tx => `
+                            <tr class="border-t border-slate-200">
+                                <td class="px-4 py-2 whitespace-nowrap">${tx.date}</td>
+                                <td class="px-4 py-2">${tx.content}</td>
+                                <td class="px-4 py-2 text-right">${fmtWon(tx.amount)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        modal.classList.remove('hidden');
+    }
+
+    function renderAll() {
+        if (!window.__data) return;
+        const selectedAssets = window.__data.assets.filter(it=> window.__data.selectedAssetIds.has(it.id));
+        renderSummary(selectedAssets, window.__data.liabilities, true);
+        renderCharts(selectedAssets, window.__data.liabilities);
+        document.getElementById('result').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div>${renderAssetGroupedTableWithCheckboxes('자산', window.__data.assets, window.__data.selectedAssetIds)}</div><div>${renderGroupedTable('부채', window.__data.liabilities)}</div></div>`;
+        
+        if(window.__cf && window.__cf.monthly.length > 0 && !(window.__cf.monthly.every(m => m.income === 0 && m.expense === 0))) {
+            renderCashflowSummary(window.__cf);
+            renderCashflowDetails(window.__cf);
+        } else {
+            renderCashflowSummary(null); // This will show the "no data" message
+             const cashflowEl = document.getElementById('cashflow');
+             if (cashflowEl) cashflowEl.innerHTML = '<div class="text-slate-500 p-4 border rounded-lg bg-slate-50">현금흐름 데이터를 찾을 수 없습니다. [진단 로그] 탭을 확인하세요.</div>';
+        }
+    }
+    
+    function getChartAsImage(chartInstance) {
+        if (!chartInstance || !chartInstance.canvas) return '';
+        const canvas = chartInstance.canvas;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.fillStyle = '#FFFFFF';
+        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        tempCtx.drawImage(canvas, 0, 0);
+        return tempCanvas.toDataURL('image/png');
+    }
+
+    function generateStaticHTML() {
+        __log("정적 HTML 콘텐츠 캡처 시작...");
+        const summaryHTML = document.getElementById('summary').innerHTML;
+        const cashflowSummaryHTML = document.getElementById('cashflow-summary').innerHTML;
+        const detailsNode = document.getElementById('result').cloneNode(true);
+        detailsNode.querySelectorAll('input[type="checkbox"], label').forEach(el => el.remove());
+        const detailsHTML = detailsNode.innerHTML;
+        const cashflowNode = document.getElementById('cashflow').cloneNode(true);
+        cashflowNode.querySelectorAll('canvas, select, .category-row').forEach(el => {
+             if(el.classList.contains('category-row')) {
+                el.style.cursor = 'default';
+                el.classList.remove('hover:bg-slate-50');
+             } else { el.remove(); }
+        });
+        const cashflowDetailsHTML = cashflowNode.innerHTML;
+        const chartImages = {};
+        for (const key in charts) { if (charts[key]) { chartImages[key] = getChartAsImage(charts[key]); } }
+        __log("차트를 이미지로 변환 완료.");
+
+        return `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>🐧 핑구네 가계부 분석 결과</title><script src="https://cdn.tailwindcss.com"><\/script><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet"><style>body { font-family: 'Inter', 'Noto Sans KR', sans-serif; background-color: #f1f5f9; } .card { background-color: #ffffff; border-radius: 0.75rem; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); }</style></head><body class="min-h-screen"><header class="bg-white shadow-sm"><div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8"><div class="flex items-center gap-3"><div class="text-2xl">🐧</div><h1 class="text-xl font-bold text-slate-800">핑구네 가계부 분석 결과 (읽기 전용)</h1></div></div></header><main class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8"><h3 class="text-base font-semibold text-slate-600 mt-6">재무 현황 요약</h3><div class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4">${summaryHTML}</div><h3 class="text-base font-semibold text-slate-600 mt-6">현금흐름 요약 (최근 12개월)</h3><div class="mt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">${cashflowSummaryHTML}</div><h3 class="text-base font-semibold text-slate-600 mt-6">차트 요약</h3><div class="mt-2 grid grid-cols-1 lg:grid-cols-3 gap-6"><div class="card p-4 lg:col-span-1"><h3 class="font-semibold mb-2">자산 vs 부채</h3><div class="h-64 flex items-center justify-center"><img src="${chartImages.pie || ''}" class="max-w-full max-h-full object-contain"></div></div><div class="card p-4 lg:col-span-2"><h3 class="font-semibold mb-2">항목별 자산 현황</h3><div class="h-64 flex items-center justify-center"><img src="${chartImages.barAsset || ''}" class="max-w-full max-h-full object-contain"></div></div></div><div class="card mt-6 p-6"><h2 class="text-lg font-bold mb-4">자산/부채 상세</h2>${detailsHTML}</div><div class="card mt-6 p-6"><h2 class="text-lg font-bold mb-4">현금흐름 분석</h2><div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6"><div class="card p-4"><h3 class="font-semibold mb-2">월별 현금흐름</h3><div class="h-72 relative flex items-center justify-center"><img src="${chartImages.cfMonthly || ''}" class="max-w-full max-h-full object-contain"></div></div><div class="card p-4"><h3 class="font-semibold mb-2">상위 지출 카테고리</h3><div class="h-72 relative flex items-center justify-center"><img src="${chartImages.cfCat || ''}" class="max-w-full max-h-full object-contain"></div></div></div>${cashflowDetailsHTML}</div></main></body></html>`;
+    }
+    
+    async function exportAndGetLink() {
+        __log('✅ "링크로 저장" 버튼 클릭됨. 비밀 링크 생성을 시작합니다.');
+        const modal = document.getElementById('link-modal');
+        const linkContainer = document.getElementById('link-container');
+        const statusText = document.getElementById('link-status');
+
+        if (!modal || !linkContainer || !statusText) return; // Defensive
+
+        modal.classList.remove('hidden');
+        statusText.innerHTML = '<div class="flex justify-center items-center gap-2"><svg class="animate-spin h-5 w-5 text-sky-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>링크 생성 중...</span></div>';
+        linkContainer.innerHTML = '';
+
+        try {
+            if (!window.__data) {
+                statusText.textContent = '❌ 저장할 데이터가 없습니다.';
+                return;
+            }
+
+            const staticHTML = generateStaticHTML();
+
+            const response = await fetch('https://hastebin.com/documents', {
+                method: 'POST',
+                body: staticHTML
+            });
+
+            if (!response.ok) {
+                 const errorText = await response.text();
+                throw new Error(`Server Error: ${response.status} - ${errorText}`);
+            }
+
+            const result = await response.json();
+             if (!result.key) {
+                 throw new Error("Hastebin did not return a key.");
+             }
+            const key = result.key;
+            const shareableLink = `https://hastebin.com/raw/${key}`;
+
+            __log(`✅ 비밀 링크 생성 완료: ${shareableLink}`);
+
+            statusText.textContent = '✅ 비밀 링크 생성 완료!';
+            linkContainer.innerHTML = `
+                <p class="text-sm text-slate-600">아래 링크를 복사해서 저장하거나 다른 사람에게 공유하세요. 이 창을 닫으면 링크는 사라집니다!</p>
+                <div class="mt-2 flex items-center gap-2">
+                    <input id="share-link-input" type="text" value="${shareableLink}" class="w-full border rounded-md p-2 bg-slate-50 font-mono text-sm" readonly>
+                    <button id="copy-link-btn" class="btn btn-secondary flex-shrink-0">복사</button>
+                </div>
+            `;
+
+            const copyBtn = document.getElementById('copy-link-btn');
+            const linkInput = document.getElementById('share-link-input');
+            if(copyBtn && linkInput) {
+                copyBtn.addEventListener('click', (e) => {
+                    linkInput.select();
+                     try {
+                         document.execCommand('copy');
+                         copyBtn.textContent = '✅';
+                         setTimeout(() => { copyBtn.textContent = '복사'; }, 2000);
+                     } catch (err) {
+                          __log('❌ 클립보드 복사 실패:', err);
+                          copyBtn.textContent = '실패';
+                          setTimeout(() => { copyBtn.textContent = '복사'; }, 2000);
+                     }
+                });
+            }
+
+        } catch (error) {
+            __log('❌ 링크 생성 실패:', error);
+            statusText.textContent = '❌ 링크 생성에 실패했습니다.';
+            linkContainer.innerHTML = `<p class="text-sm text-center text-red-600">네트워크 연결을 확인하고 다시 시도해주세요. 오류: ${error.message}</p>`;
+        }
+    }
+
+
+    // ===== Main runner =====
+    async function run(){
+      try{
+        setStatus(true,'파일 읽는 중...');
+        __log('▶️ 분석 시작');
+        const runButton = document.getElementById('runBtn');
+        runButton.disabled = true;
+        const files = [document.getElementById('file1').files[0], document.getElementById('file2').files[0]].filter(Boolean);
+        if(!files.length){ 
+          setStatus(false,'파일을 선택하세요.'); 
+          runButton.disabled = false;
+          return; 
+        }
+
+        const parsedFS = [], parsedCF = [], allTransactions = [];
+        for(const f of files){
+          const buf = await readFileAsArrayBuffer(f);
+          setStatus(true, `'${f.name}' 파싱 중...`);
+          const wb = XLSX.read(buf, { type: 'array', cellDates:true }); // Keep cellDates for potential date values
+          
+          const sheetFS = pickBangsaelSheet(wb, '뱅샐현황');
+          if(sheetFS){ 
+              // IMPORTANT: Use header:1, but NOT raw:true for cashflow parsing robustness
+              const rowsForFS = XLSX.utils.sheet_to_json(sheetFS, { header:1, raw: true }); // Use raw for FS
+              const rowsForCF = XLSX.utils.sheet_to_json(sheetFS, { header:1 }); // Use default (parsed values) for CF
+              parsedFS.push(parseFinancialStatus(rowsForFS));
+              parsedCF.push(parseCashflow(rowsForCF)); // Pass non-raw rows
+          }
+          
+          const sheetTX = pickBangsaelSheet(wb, '가계부 내역');
+          if (sheetTX) {
+              // Use non-raw for transactions as well, relying on parseNumber and date parsing
+              const rows = XLSX.utils.sheet_to_json(sheetTX, { header: 1 }); 
+              allTransactions.push(...parseTransactions(rows));
+          }
+        }
+        setStatus(true, '결과를 합치는 중...');
+        const assets = parsedFS.flatMap(r=> r.assets||[]);
+        const liabilities = parsedFS.flatMap(r=> r.liabilities||[]);
+        assets.forEach((it,i)=> it.id = 'A'+i);
+
+        const selectedAssetIds = new Set(assets.map(it=>it.id));
+        const cfMerged = mergeCashflowResults(parsedCF);
+        
+        // Final check on cfMerged data
+        if (cfMerged && cfMerged.monthly && cfMerged.monthly.length > 0) {
+             __log('✅ 최종 병합된 월별 데이터 (최신 3):', JSON.stringify(cfMerged.monthly.slice(-3)));
+             if (cfMerged.monthly.every(m => m.income === 0 && m.expense === 0)) {
+                 __log('⚠️ 경고: 모든 월의 수입/지출 합계가 0입니다. 파싱 로직이나 원본 데이터 확인 필요.');
+             }
+        } else {
+             __log('⚠️ 최종 병합된 월별 데이터가 비어있습니다.');
+        }
+
+
+        window.__data = { assets, liabilities, selectedAssetIds }; // Keep selectedAssetIds separate
+        window.__cf = cfMerged;
+        window.__transactions = allTransactions;
+        
+        document.getElementById('upload-section').classList.add('hidden');
+        document.getElementById('results-section').classList.remove('hidden');
+        
+        renderAll();
+
+        const resultEl = document.getElementById('result');
+        if (resultEl) {
+            resultEl.addEventListener('change', (e) => {
+                if (e.target.classList.contains('asset-select')) {
+                    const id = e.target.getAttribute('data-id');
+                    if (window.__data && window.__data.selectedAssetIds) { // Ensure state exists
+                        if (e.target.checked) window.__data.selectedAssetIds.add(id);
+                        else window.__data.selectedAssetIds.delete(id);
+                        
+                        // Re-filter selected assets based on the updated set
+                        const selectedAssets = window.__data.assets.filter(it=> window.__data.selectedAssetIds.has(it.id));
+                        renderSummary(selectedAssets, window.__data.liabilities, true);
+                        renderCharts(selectedAssets, window.__data.liabilities);
+                    }
+                }
+            });
+        }
+        setStatus(false,'완료');
+        __log('✅ 분석 완료');
+      }catch(err){
+        setStatus(false,'오류 발생');
+        __log('❌ 오류:', err.message, err.stack); // Log more error details
+      } finally {
+        if(document.getElementById('runBtn')) {
+            document.getElementById('runBtn').disabled = false;
+        }
+      }
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        __log('✅ DOM 로드 완료. 새 분석 세션을 시작합니다.');
+        document.getElementById('upload-section').classList.remove('hidden');
+
+        setupUI();
+        const runBtn = document.getElementById('runBtn');
+        if(runBtn) runBtn.addEventListener('click', run);
+        
+        const exportBtn = document.getElementById('exportBtn');
+        if(exportBtn) exportBtn.addEventListener('click', exportAndGetLink);
+        
+        const resetBtn = document.getElementById('resetBtn');
+        if(resetBtn) resetBtn.addEventListener('click', () => { window.location.href = window.location.pathname; });
+        
+        const cashflowEl = document.getElementById('cashflow');
+        if(cashflowEl) {
+             cashflowEl.addEventListener('click', (e) => {
+                const row = e.target.closest('.category-row');
+                if (row) {
+                    const category = row.dataset.category;
+                    const type = row.dataset.type;
+                     if (category && type) { // Ensure data attributes exist
+                        showTransactionModal(category, type);
+                     }
+                }
+            });
+             cashflowEl.addEventListener('change', (e) => { // Move month selector listener here
+                 if (e.target.id === 'month-selector') {
+                    renderCategoryTables(e.target.value);
+                 }
+             });
+        }
+
+    });
+
+  </script>
+</body>
+</html>
+
+
