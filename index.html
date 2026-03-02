@@ -7,6 +7,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- LZString (문자열 압축 라이브러리) -->
+  <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
@@ -14,9 +16,6 @@
     /* ==============================================
       NEW THEME & UI KIT
       ==============================================
-      - Font: Inter (Eng), Noto Sans KR (Kor)
-      - Color Palette: Slate (base), Sky (primary)
-      - Style: Modern, clean, dashboard-like
     */
     :root{
       --primary-color: #0ea5e9; /* Sky 500 */
@@ -52,26 +51,22 @@
       transition: all 0.2s ease;
       cursor: pointer;
       border: 1px solid transparent;
-      text-decoration: none; /* For <a> tags styled as buttons */
+      text-decoration: none; 
     }
     .btn-primary {
-      background-color: #0ea5e9; /* Sky 500 - Direct color for visibility */
+      background-color: #0ea5e9; 
       color: white;
       box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     }
-    .btn-primary:hover {
-      background-color: #0284c7; /* Sky 600 - Direct color for visibility */
-    }
+    .btn-primary:hover { background-color: #0284c7; }
     .btn-secondary {
         background-color: #f8fafc;
         color: #334155;
         border-color: #e2e8f0;
     }
-    .btn-secondary:hover {
-        background-color: #f1f5f9;
-    }
+    .btn-secondary:hover { background-color: #f1f5f9; }
     .btn:disabled {
-      background-color: #94a3b8; /* Slate 400 */
+      background-color: #94a3b8; 
       cursor: not-allowed;
       opacity: 0.7;
     }
@@ -82,13 +77,11 @@
         text-align: center;
         transition: border-color 0.2s ease;
     }
-    .file-input-wrapper.dragover {
-        border-color: var(--primary-color);
-    }
+    .file-input-wrapper.dragover { border-color: var(--primary-color); }
     .file-input {
       width: 100%;
       border: 1px solid var(--border-color);
-      background-color: #f8fafc; /* Slate 50 */
+      background-color: #f8fafc; 
       border-radius: 0.5rem;
       font-size: 0.875rem;
     }
@@ -103,9 +96,7 @@
       font-weight: 500;
       transition: background-color 0.2s ease;
     }
-     .file-input::file-selector-button:hover {
-      background-color: var(--primary-hover);
-    }
+     .file-input::file-selector-button:hover { background-color: var(--primary-hover); }
     .tab-btn {
         padding: 0.5rem 1rem;
         font-weight: 600;
@@ -143,9 +134,7 @@
         display: flex;
         flex-direction: column;
     }
-    .hidden {
-        display: none;
-    }
+    .hidden { display: none; }
   </style>
 </head>
 <body class="min-h-screen">
@@ -163,33 +152,40 @@
 
   <!-- Main Content -->
   <main class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-    <!-- Step 1: Upload -->
+    <!-- Step 1: Upload (or Loading Shared Data) -->
     <div id="upload-section" class="card p-6">
-      <div class="flex items-center gap-3">
-        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-sky-500 text-white grid place-items-center font-bold text-lg">1</div>
-        <div>
-          <h2 class="text-lg font-bold">뱅샐현황 엑셀 파일 업로드</h2>
-          <p class="text-sm text-slate-500">분석할 파일을 최대 2개까지 선택하거나 드래그 앤 드롭하세요.</p>
-        </div>
-      </div>
+      <div id="upload-ui">
+          <div class="flex items-center gap-3">
+            <div class="flex-shrink-0 h-10 w-10 rounded-full bg-sky-500 text-white grid place-items-center font-bold text-lg">1</div>
+            <div>
+              <h2 class="text-lg font-bold">뱅샐현황 엑셀 파일 업로드</h2>
+              <p class="text-sm text-slate-500">분석할 파일을 최대 2개까지 선택하거나 드래그 앤 드롭하세요.</p>
+            </div>
+          </div>
 
-      <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="file-input-wrapper" id="dropzone1">
-          <svg class="mx-auto h-12 w-12 text-slate-300" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
-          <input id="file1" type="file" accept=".xlsx, .csv" class="mt-4 file-input" />
-        </div>
-        <div class="file-input-wrapper" id="dropzone2">
-          <svg class="mx-auto h-12 w-12 text-slate-300" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
-          <input id="file2" type="file" accept=".xlsx, .csv" class="mt-4 file-input" />
-        </div>
+          <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="file-input-wrapper" id="dropzone1">
+              <svg class="mx-auto h-12 w-12 text-slate-300" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              <input id="file1" type="file" accept=".xlsx, .csv" class="mt-4 file-input" />
+            </div>
+            <div class="file-input-wrapper" id="dropzone2">
+              <svg class="mx-auto h-12 w-12 text-slate-300" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              <input id="file2" type="file" accept=".xlsx, .csv" class="mt-4 file-input" />
+            </div>
+          </div>
+          
+          <div class="mt-6 flex justify-end items-center gap-4">
+            <span id="status" class="text-sm text-slate-500"></span>
+            <button id="runBtn" class="btn btn-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 1.414L10.586 9H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z" clip-rule="evenodd" /></svg>
+              분석 시작
+            </button>
+          </div>
       </div>
-      
-      <div class="mt-6 flex justify-end items-center gap-4">
-        <span id="status" class="text-sm text-slate-500"></span>
-        <button id="runBtn" class="btn btn-primary">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 1.414L10.586 9H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z" clip-rule="evenodd" /></svg>
-          분석 시작
-        </button>
+      <div id="shared-loading-ui" class="hidden text-center py-10">
+          <svg class="animate-spin h-10 w-10 text-sky-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+          <h2 class="text-lg font-bold text-slate-700">공유받은 데이터를 불러오는 중입니다...</h2>
+          <p class="text-sm text-slate-500 mt-2">잠시만 기다려주세요.</p>
       </div>
     </div>
 
@@ -204,11 +200,11 @@
             </div>
         </div>
         <div class="flex items-center gap-2">
-            <button id="exportBtn" class="btn btn-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
-                공유용 파일 저장
+            <button id="exportBtn" class="btn btn-primary bg-yellow-500 hover:bg-yellow-600 text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                카카오톡 공유 링크 만들기
             </button>
-            <button id="resetBtn" class="btn btn-secondary">새 파일로 분석하기</button>
+            <button id="resetBtn" class="btn btn-secondary">처음으로</button>
         </div>
       </div>
 
@@ -265,7 +261,7 @@
   <div id="link-modal" class="modal-overlay hidden">
       <div class="modal-content">
           <div class="p-4 border-b border-slate-200 flex justify-between items-center">
-              <h3 class="text-lg font-semibold">공유용 HTML 파일 저장</h3>
+              <h3 class="text-lg font-semibold">비밀 링크 복사</h3>
               <button id="close-link-modal-btn" class="text-slate-400 hover:text-slate-600">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -273,38 +269,60 @@
           <div class="p-4 flex-grow overflow-y-auto flex flex-col gap-4">
               <div id="link-status" class="text-center font-semibold"></div>
               <div id="link-container"></div>
+              <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg mt-4">
+                  <h4 class="font-bold text-yellow-800">보안 안내</h4>
+                  <p class="text-sm text-yellow-700 mt-1">생성된 링크는 서버에 저장되지 않으며, 링크 주소 그 자체에 암호화된 데이터가 포함되어 있습니다. 이 링크를 전달받은 사람만 내용을 확인할 수 있습니다.</p>
+              </div>
           </div>
       </div>
   </div>
 
   <script>
     // ===== UI Enhancements (Drag & Drop, Tabs, Modal) =====
+    // 카카오톡 웹뷰 등 모바일 호환성을 극대화하기 위해 NodeList.forEach 대신 일반 for문 사용
     function setupUI() {
-        ['dropzone1', 'dropzone2'].forEach((id, index) => {
-            const dropzone = document.getElementById(id);
-            const fileInput = document.getElementById(`file${index + 1}`);
-            if(!dropzone || !fileInput) return;
-            dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
-            dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-            dropzone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                dropzone.classList.remove('dragover');
-                if (e.dataTransfer.files.length) {
-                    fileInput.files = e.dataTransfer.files;
-                    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            });
-        });
+        var dropzones = ['dropzone1', 'dropzone2'];
+        for (var i = 0; i < dropzones.length; i++) {
+            (function(index) {
+                const dropzone = document.getElementById(dropzones[index]);
+                const fileInput = document.getElementById('file' + (index + 1));
+                if(!dropzone || !fileInput) return;
+                dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+                dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+                dropzone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    dropzone.classList.remove('dragover');
+                    if (e.dataTransfer.files.length) {
+                        fileInput.files = e.dataTransfer.files;
+                        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                });
+            })(i);
+        }
+
         const tabButtons = document.getElementById('tab-buttons');
         const tabContents = document.querySelectorAll('.tab-content');
         if(tabButtons) {
             tabButtons.addEventListener('click', (e) => {
-                const target = e.target.closest('.tab-btn');
-                if (!target) return;
-                tabButtons.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                let target = e.target;
+                while (target && target !== document && (!target.classList || !target.classList.contains('tab-btn'))) {
+                    target = target.parentNode;
+                }
+                if (!target || target === document) return;
+
+                const btns = tabButtons.querySelectorAll('.tab-btn');
+                for (let j = 0; j < btns.length; j++) {
+                    btns[j].classList.remove('active');
+                }
                 target.classList.add('active');
-                tabContents.forEach(content => content.classList.remove('active'));
-                document.getElementById(`tab-${target.dataset.tab}`).classList.add('active');
+                
+                for (let j = 0; j < tabContents.length; j++) {
+                    tabContents[j].classList.remove('active');
+                }
+                
+                const contentId = 'tab-' + target.getAttribute('data-tab');
+                const contentEl = document.getElementById(contentId);
+                if (contentEl) contentEl.classList.add('active');
             });
         }
         
@@ -362,13 +380,14 @@
       let curAssetCategory = ''; let curLiabCategory = '';
       for (let i = range.start; i < range.end; i++) {
         const r = rows[i] || [];
-        const aCatCell = String(r[cols.aCat] ?? '').trim();
-        const aProdCell = String(r[cols.aProd] ?? '').trim();
+        const aCatCell = r[cols.aCat] != null ? String(r[cols.aCat]).trim() : '';
+        const aProdCell = r[cols.aProd] != null ? String(r[cols.aProd]).trim() : '';
         const aAmt = parseNumber(r[cols.aAmt]);
         if (aCatCell && !['자산', '부채', '항목'].includes(aCatCell)) curAssetCategory = aCatCell;
         if (aProdCell && aAmt != null && aAmt >= MIN_AMOUNT) assets.push({ 항목명: curAssetCategory || '기타', 상품명: aProdCell, 금액: aAmt });
-        const lCatCell = String(r[cols.lCat] ?? '').trim();
-        const lProdCell = String(r[cols.lProd] ?? '').trim();
+        
+        const lCatCell = r[cols.lCat] != null ? String(r[cols.lCat]).trim() : '';
+        const lProdCell = r[cols.lProd] != null ? String(r[cols.lProd]).trim() : '';
         const lAmt = parseNumber(r[cols.lAmt]);
         if (lCatCell && !['자산', '부채', '항목'].includes(lCatCell)) curLiabCategory = lCatCell;
         if (lProdCell && lAmt != null && lAmt >= MIN_AMOUNT) liabilities.push({ 항목명: curLiabCategory || '기타', 상품명: lProdCell, 금액: lAmt });
@@ -429,7 +448,11 @@
 
     function renderAssetGroupedTableWithCheckboxes(title, items, selectedSet) {
         const groups = groupByCategory(items);
-        let html = `<h3 class="text-lg font-semibold mb-2">${title}</h3><p class="text-sm text-slate-500 mb-4">그래프 및 요약에 포함할 항목을 선택하세요.</p>`;
+        // 공유 모드일 때는 체크박스를 비활성화(disabled) 처리하여 단순 보기 모드로 만듦
+        const isShared = window.__isSharedUrlData;
+        let html = `<h3 class="text-lg font-semibold mb-2">${title}</h3>`;
+        if(!isShared) html += `<p class="text-sm text-slate-500 mb-4">그래프 및 요약에 포함할 항목을 선택하세요.</p>`;
+        
         if (items.length === 0) { return html + `<div class="text-slate-500 p-4 border rounded-lg bg-slate-50">데이터 없음</div>`; }
         html += `<div class="space-y-4">`;
         for (const [cat, rows] of groups.entries()) {
@@ -445,12 +468,12 @@
                     ${rows.map(r => `
                         <tr class="border-t border-slate-200">
                             <td class="px-4 py-2 w-full">
-                                <label class="flex items-center gap-3 cursor-pointer">
-                                    <input type="checkbox" class="asset-select h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-500" data-id="${r.id}" ${selectedSet.has(r.id) ? 'checked' : ''} />
-                                    <span>${r.상품명}</span>
+                                <label class="flex items-center gap-3 ${isShared ? '' : 'cursor-pointer'}">
+                                    <input type="checkbox" class="asset-select h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-500" data-id="${r.id}" ${selectedSet.has(r.id) ? 'checked' : ''} ${isShared ? 'disabled' : ''} />
+                                    <span class="${isShared && !selectedSet.has(r.id) ? 'text-slate-400 line-through' : ''}">${r.상품명}</span>
                                 </label>
                             </td>
-                            <td class="px-4 py-2 text-right font-medium whitespace-nowrap">${fmtWon(r.금액)}</td>
+                            <td class="px-4 py-2 text-right font-medium whitespace-nowrap ${isShared && !selectedSet.has(r.id) ? 'text-slate-400' : ''}">${fmtWon(r.금액)}</td>
                         </tr>`).join('')}
                     </tbody>
                 </table>
@@ -487,7 +510,11 @@
 
     function renderCharts(assets, liabilities) {
       const chartsEl = document.getElementById('charts');
-      if (!window.Chart) { chartsEl.innerHTML = '<p>Chart.js 로딩 실패</p>'; return; }
+      if (!window.Chart) { 
+          chartsEl.innerHTML = '<div class="card p-4 lg:col-span-3 text-center text-slate-500">차트 라이브러리 연결 지연 중...</div>'; 
+          return; 
+      }
+
       const assetTotal = assets.reduce((s, r) => s + (r.금액 || 0), 0);
       const liabTotal = liabilities.reduce((s, r) => s + (r.금액 || 0), 0);
       chartsEl.innerHTML = `
@@ -517,44 +544,30 @@
             break; 
         }
       }
-      if(start === -1) {
-          __log("⚠️ '뱅샐현황' 시트에서 '현금흐름' 섹션을 찾지 못했습니다.");
-          return null;
-      }
+      if(start === -1) { return null; }
       return { start: start + 1, end };
     }
 
     function parseMonthLike(val) {
         if (!val) return null;
         if (val instanceof Date) { return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, '0')}`; }
-        // Handle Excel date numbers
         if (typeof val === 'number' && val > 30000 && val < 60000) { 
-            const date = XLSX.SSF.parse_date_code(val); // Use XLSX date parsing
+            const date = XLSX.SSF.parse_date_code(val);
             if (date) { return `${date.y}-${String(date.m).padStart(2, '0')}`; }
         }
         const s = String(val).trim();
-        
-        // YYYY-MM, YYYY.MM, YYYY/MM, YYYY MM
         let m = s.match(/(20\d{2})[.\/\s-]+(\d{1,2})/);
         if (m) { return `${m[1]}-${String(m[2]).padStart(2, '0')}`; }
-        
-        // YYYY년 M월
         m = s.match(/(20\d{2})\s*년\s*(\d{1,2})\s*월/);
         if (m) { return `${m[1]}-${String(m[2]).padStart(2, '0')}`; }
-
-        // YY-MM, YY.MM, YY/MM, YY MM
         m = s.match(/(\d{2})[.\/\s-]+(\d{1,2})/);
         if (m) { return `20${m[1]}-${String(m[2]).padStart(2, '0')}`; }
-        
-        // YY년 M월
         m = s.match(/(\d{2})\s*년\s*(\d{1,2})\s*월/);
         if (m) { return `20${m[1]}-${String(m[2]).padStart(2, '0')}`; }
-
         return null;
     }
 
     function parseCashflowMatrix(rows, s, e) {
-        // 1) 월 헤더 찾기
         let monthsInfo = null;
         for (let i = s; i < Math.min(e, s + 40); i++) {
             const row = rows[i] || [];
@@ -568,49 +581,43 @@
                 break; 
             }
         }
-        if (!monthsInfo) { __log("⚠️ 현금흐름 섹션에서 월(month) 헤더를 찾지 못했습니다."); return null; }
-        __log(`✅ 현금흐름 월 헤더를 ${monthsInfo.headerRowIndex}행에서 찾았습니다.`);
+        if (!monthsInfo) return null;
 
         const monthColMap = new Map(monthsInfo.monthMap.map(m => [m.month, m.col]));
-
-        // 2) '월수입총계' / '월지출총계' 구간 및 행 찾기
         let incomeTotalRow, expenseTotalRow, incomeCatEndIdx = -1, expenseCatStartIdx = -1, expenseCatEndIdx = -1;
         for (let i = monthsInfo.headerRowIndex + 1; i < e; i++) {
             const row = rows[i] || [];
-            const normalizedRowContent = row.map(cell => cell ?? '').join('').replace(/\s/g, ''); 
+            const normalizedRowContent = row.map(cell => cell != null ? cell : '').join('').replace(/\s/g, ''); 
             if (normalizedRowContent.includes('월수입총계')) {
                 incomeTotalRow = row; 
-                incomeCatEndIdx = i;           // 수입 카테고리 끝
-                expenseCatStartIdx = i + 1;    // 지출 카테고리 시작
+                incomeCatEndIdx = i;           
+                expenseCatStartIdx = i + 1;    
             } else if (normalizedRowContent.includes('월지출총계')) {
                 expenseTotalRow = row; 
-                expenseCatEndIdx = i;          // 지출 카테고리 끝
+                expenseCatEndIdx = i;          
                 break;
             }
         }
-        if (!incomeTotalRow || !expenseTotalRow) { __log("⚠️ '월수입총계' 또는 '월지출총계' 행을 찾지 못했습니다."); return null; }
+        if (!incomeTotalRow || !expenseTotalRow) return null;
         
-        // 3) 월별 합계 계산 유틸
         const safeParseNumber = (v) => {
             const num = parseNumber(v); 
             return num === null ? 0 : num; 
         };
         
         const sumColOverRange = (col, startIdx, endIdx) => {
-            let s = 0;
+            let sum = 0;
             for (let r = startIdx; r < endIdx; r++) {
                 if (!rows[r]) continue; 
-                const v = safeParseNumber(rows[r][col]);
-                s += Math.abs(v);
+                sum += Math.abs(safeParseNumber(rows[r][col]));
             }
-            return s;
+            return sum;
         };
 
-        // 4) 월별 수입/지출
         const monthlyData = [];
         for (const [month, monthCol] of monthColMap.entries()) {
-            const incomeFromTotal  = safeParseNumber(incomeTotalRow?.[monthCol]);
-            const expenseFromTotal = safeParseNumber(expenseTotalRow?.[monthCol]);
+            const incomeFromTotal  = safeParseNumber(incomeTotalRow ? incomeTotalRow[monthCol] : null);
+            const expenseFromTotal = safeParseNumber(expenseTotalRow ? expenseTotalRow[monthCol] : null);
 
             const incomeFromCats  = sumColOverRange(monthCol, monthsInfo.headerRowIndex + 1, incomeCatEndIdx);
             const expenseFromCats = sumColOverRange(monthCol, expenseCatStartIdx, expenseCatEndIdx);
@@ -618,14 +625,9 @@
             const incomeFinal  = (incomeFromTotal && incomeFromTotal !== 0) ? incomeFromTotal : incomeFromCats;
             const expenseFinal = (expenseFromTotal && expenseFromTotal !== 0) ? Math.abs(expenseFromTotal) : expenseFromCats;
 
-            monthlyData.push({
-                ym: month,
-                income: Math.round(incomeFinal || 0),
-                expense: Math.round(expenseFinal || 0),
-            });
+            monthlyData.push({ ym: month, income: Math.round(incomeFinal || 0), expense: Math.round(expenseFinal || 0) });
         }
 
-        // 5) 카테고리 집계
         const getFirstMeaningfulCellIndex = (row) => {
             if(!row) return -1;
             for(let i=0; i < row.length; i++) {
@@ -647,8 +649,7 @@
 
                 let categoryTotal = 0;
                 for (const [, col] of monthColMap.entries()) {
-                    const monthlyValue = safeParseNumber(row[col]); 
-                    categoryTotal += Math.abs(monthlyValue); 
+                    categoryTotal += Math.abs(safeParseNumber(row[col])); 
                 }
                 if (Math.abs(categoryTotal) >= MIN_AMOUNT) {
                     catMap.set(name, (catMap.get(name) || 0) + Math.round(Math.abs(categoryTotal)));
@@ -665,19 +666,13 @@
 
     function parseCashflow(rows){
       const range = findCashflowRange(rows); if(!range){ return null; }
-      const mx = parseCashflowMatrix(rows, range.start, range.end);
-      if (mx) {
-          __log("✅ 현금흐름 데이터 파싱 성공.");
-          return mx;
-      }
-      return null;
+      return parseCashflowMatrix(rows, range.start, range.end);
     }
     
     function last12MonthsSorted(allMonths){
         if(!allMonths.length) return []; 
         const toNum=(ym)=>{ const [y,m]=ym.split('-'); return y*100+Number(m); };
-        const sorted = Array.from(new Set(allMonths)).sort((a,b)=>toNum(b)-toNum(a)).slice(0,12).sort((a,b)=>toNum(a)-toNum(b));
-        return sorted;
+        return Array.from(new Set(allMonths)).sort((a,b)=>toNum(b)-toNum(a)).slice(0,12).sort((a,b)=>toNum(a)-toNum(b));
     }
     
     function mergeCashflowResults(list){
@@ -697,10 +692,7 @@
         let headerRowIndex = rows.findIndex(row => row.includes('날짜') && row.includes('대분류') && row.includes('금액') && row.includes('타입'));
         if (headerRowIndex === -1) {
             headerRowIndex = rows.findIndex(row => row && row.length > 4 && String(row[0]).includes('날짜') && String(row[3]).includes('대분류'));
-             if (headerRowIndex === -1) {
-                 __log("⚠️ '가계부 내역' 시트에서 헤더(날짜, 대분류 등)를 찾지 못했습니다.");
-                 return [];
-             }
+             if (headerRowIndex === -1) return [];
         }
 
         const headers = rows[headerRowIndex].map(h => String(h || '').trim());
@@ -785,8 +777,8 @@
 
         let html = `
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="card p-4"><h3 class="font-semibold mb-2">월별 현금흐름</h3><div class="h-72 relative"><canvas id="cfMonthly"></canvas></div></div>
-                <div class="card p-4"><h3 class="font-semibold mb-2">상위 지출 카테고리 (클릭 가능)</h3><div class="h-72 relative"><canvas id="cfCat"></canvas></div></div>
+                <div class="card p-4"><h3 class="font-semibold mb-2">월별 현금흐름</h3><div class="h-72 relative" id="cfMonthlyWrap"><canvas id="cfMonthly"></canvas></div></div>
+                <div class="card p-4"><h3 class="font-semibold mb-2">상위 지출 카테고리 (클릭 가능)</h3><div class="h-72 relative" id="cfCatWrap"><canvas id="cfCat"></canvas></div></div>
             </div>
              <div class="mt-6">
                 <div class="flex items-center justify-between mb-4">
@@ -802,6 +794,12 @@
         wrap.innerHTML = html;
 
         renderCategoryTables('overall');
+
+        if (!window.Chart) {
+            const cfWrap = document.getElementById('cfMonthlyWrap');
+            if (cfWrap) cfWrap.innerHTML = '<div class="flex items-center justify-center h-full text-slate-500 text-sm text-center">차트 로딩 중...</div>';
+            return;
+        }
 
         const top8CatPairs = expenseCatPairs.slice(0, 8);
         
@@ -867,7 +865,7 @@
             if(dataPairs.length === 0 && selectedMonth !== 'overall') return `<div class="card"><div class="px-4 py-3 bg-slate-50 font-semibold">${title}</div><div class="p-4 text-slate-500">해당 월의 상세 내역이 없습니다.</div></div>`;
             if(dataPairs.length === 0) return '';
             
-            return `
+            let html = `
             <div class="card overflow-hidden">
                 <div class="px-4 py-3 bg-slate-50 font-semibold">${title} (클릭 가능)</div>
                 <div class="overflow-x-auto">
@@ -879,14 +877,21 @@
                                 <th class="px-4 py-2 text-right">비율</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            ${dataPairs.map(([category, amount]) => `
-                                <tr class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer category-row" data-category="${category}" data-type="${type}">
-                                    <td class="px-4 py-3 font-medium whitespace-nowrap">${category}</td>
-                                    <td class="px-4 py-3 text-right ${colorClass}">${fmtWon(amount)}</td>
-                                    <td class="px-4 py-3 text-right font-semibold">${total > 0 ? ((amount / total) * 100).toFixed(1) : 0}%</td>
-                                </tr>
-                            `).join('')}
+                        <tbody>`;
+            
+            for(let i=0; i<dataPairs.length; i++) {
+                const category = dataPairs[i][0];
+                const amount = dataPairs[i][1];
+                html += `
+                    <tr class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer category-row" data-category="${category}" data-type="${type}">
+                        <td class="px-4 py-3 font-medium whitespace-nowrap">${category}</td>
+                        <td class="px-4 py-3 text-right ${colorClass}">${fmtWon(amount)}</td>
+                        <td class="px-4 py-3 text-right font-semibold">${total > 0 ? ((amount / total) * 100).toFixed(1) : 0}%</td>
+                    </tr>
+                `;
+            }
+                            
+            html += `
                         </tbody>
                         <tfoot class="bg-slate-100 font-bold">
                             <tr class="border-t-2 border-slate-300">
@@ -898,6 +903,7 @@
                     </table>
                 </div>
             </div>`;
+            return html;
         }
 
         container.innerHTML = `
@@ -910,16 +916,12 @@
 
     function showTransactionModal(category, type) {
         if (!window.__transactions || window.__transactions.length === 0) {
-            __log("거래 내역 데이터가 없습니다. '가계부 내역' 시트가 파일에 포함되어 있는지 확인하세요.");
-            const btn = document.querySelector(`[data-category="${category}"]`);
-            if(btn) {
-                btn.style.backgroundColor = '#fee2e2';
-                setTimeout(() => { btn.style.backgroundColor = ''}, 500);
-            }
+            __log("거래 내역 데이터가 없습니다.");
             return;
         }
         
-        const selectedMonth = document.getElementById('month-selector')?.value || 'overall';
+        const ms = document.getElementById('month-selector');
+        const selectedMonth = ms ? ms.value : 'overall';
         const typeStr = type === '수입' ? '수입' : '지출';
 
         let filteredTx = window.__transactions.filter(tx => {
@@ -939,7 +941,7 @@
         if (filteredTx.length === 0) {
             modalBody.innerHTML = '<p class="text-slate-500">해당 카테고리의 거래 내역이 없습니다.</p>';
         } else {
-             modalBody.innerHTML = `
+             let html = `
                 <table class="w-full text-sm text-left">
                     <thead class="bg-slate-50 text-slate-500">
                         <tr>
@@ -948,17 +950,20 @@
                             <th class="px-4 py-2 text-right">금액</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        ${filteredTx.map(tx => `
-                            <tr class="border-t border-slate-200">
-                                <td class="px-4 py-2 whitespace-nowrap">${tx.date}</td>
-                                <td class="px-4 py-2">${tx.content}</td>
-                                <td class="px-4 py-2 text-right">${fmtWon(tx.amount)}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            `;
+                    <tbody>`;
+            
+            for(let i=0; i<filteredTx.length; i++) {
+                const tx = filteredTx[i];
+                html += `
+                    <tr class="border-t border-slate-200">
+                        <td class="px-4 py-2 whitespace-nowrap">${tx.date}</td>
+                        <td class="px-4 py-2">${tx.content}</td>
+                        <td class="px-4 py-2 text-right">${fmtWon(tx.amount)}</td>
+                    </tr>
+                `;
+            }
+            html += `</tbody></table>`;
+            modalBody.innerHTML = html;
         }
 
         modal.classList.remove('hidden');
@@ -980,10 +985,10 @@
              if (cashflowEl) cashflowEl.innerHTML = '<div class="text-slate-500 p-4 border rounded-lg bg-slate-50">현금흐름 데이터를 찾을 수 없습니다. [진단 로그] 탭을 확인하세요.</div>';
         }
     }
-    
-    // ===== 새로운 기능: 공유용 파일 HTML 생성 및 다운로드 =====
-    function exportAsHTMLFile() {
-        __log('✅ "공유 파일 저장" 버튼 클릭됨.');
+
+    // ===== URL 파라미터 기반 강력한 공유 로직 =====
+    function generateShareableLink() {
+        __log('✅ "공유 링크 생성" 버튼 클릭됨.');
         const modal = document.getElementById('link-modal');
         const linkContainer = document.getElementById('link-container');
         const statusText = document.getElementById('link-status');
@@ -993,98 +998,80 @@
         modal.classList.remove('hidden');
         
         if (!window.__data) {
-            statusText.textContent = '❌ 저장할 데이터가 없습니다.';
+            statusText.textContent = '❌ 공유할 분석 데이터가 없습니다.';
             return;
         }
 
         try {
-            statusText.innerHTML = '<div class="flex items-center gap-2 justify-center"><svg class="animate-spin h-5 w-5 text-sky-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>공유용 파일을 생성하는 중입니다...</span></div>';
+            statusText.innerHTML = '<div class="flex items-center gap-2 justify-center"><svg class="animate-spin h-5 w-5 text-sky-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>데이터를 압축하여 보안 링크를 생성 중입니다...</span></div>';
             linkContainer.innerHTML = '';
 
-            // 현재 페이지의 전체 HTML 복제
-            const clonedDoc = document.documentElement.cloneNode(true);
-
-            // 공유 파일에서는 업로드 창 대신 결과 창이 바로 보이도록 설정
-            clonedDoc.querySelector('#upload-section').classList.add('hidden');
-            clonedDoc.querySelector('#results-section').classList.remove('hidden');
-            clonedDoc.querySelector('#link-modal').classList.add('hidden');
-
-            // ★ Set, Map 객체가 손실되지 않도록 변환
-            const sharedData = {
-                data: {
-                    assets: window.__data.assets,
-                    liabilities: window.__data.liabilities,
-                    selectedAssetIds: Array.from(window.__data.selectedAssetIds || [])
+            // 공유할 핵심 데이터만 추출
+            const payload = {
+                d: { // data
+                    a: window.__data.assets,
+                    l: window.__data.liabilities,
+                    s: Array.from(window.__data.selectedAssetIds || [])
                 },
-                cf: window.__cf ? {
-                    monthly: window.__cf.monthly,
-                    incomeCategories: Array.from((window.__cf.incomeCategories || new Map()).entries()),
-                    expenseCategories: Array.from((window.__cf.expenseCategories || new Map()).entries())
+                c: window.__cf ? { // cf
+                    m: window.__cf.monthly,
+                    i: Array.from((window.__cf.incomeCategories || new Map()).entries()),
+                    e: Array.from((window.__cf.expenseCategories || new Map()).entries())
                 } : null,
-                transactions: window.__transactions
+                t: window.__transactions || [] // transactions
             };
 
-            // 데이터를 문자열로 만들고, 스크립트 태그 닫힘 등 XSS 방지를 위해 치환
-            const jsonString = JSON.stringify(sharedData).replace(/</g, '\\u003c');
+            // 데이터를 JSON으로 만들고 극강으로 압축 (lz-string 사용)
+            const jsonString = JSON.stringify(payload);
+            const compressed = LZString.compressToEncodedURIComponent(jsonString);
 
-            // 데이터 삽입 스크립트 생성 (주석 줄바꿈 오류 방지)
-            const dataScript = document.createElement('script');
-            dataScript.id = 'injected-data';
-            dataScript.textContent = `
-                window.__isShared = true;
-                const sharedData = ${jsonString};
-                
-                // Array를 다시 Set, Map으로 복원
-                window.__data = sharedData.data;
-                window.__data.selectedAssetIds = new Set(window.__data.selectedAssetIds);
-                
-                window.__cf = sharedData.cf;
-                if (window.__cf) {
-                    window.__cf.incomeCategories = new Map(window.__cf.incomeCategories);
-                    window.__cf.expenseCategories = new Map(window.__cf.expenseCategories);
-                }
-                
-                window.__transactions = sharedData.transactions;
-            `;
-            clonedDoc.querySelector('body').appendChild(dataScript);
+            // 현재 URL(GitHub Pages 주소)에 압축된 데이터를 파라미터로 붙임
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('data', compressed);
+            const finalUrl = currentUrl.toString();
 
-            // 최종 HTML 텍스트 조립
-            const finalHTML = '<!DOCTYPE html>\n' + clonedDoc.outerHTML;
-
-            // 파일로 다운로드 트리거
-            const blob = new Blob([finalHTML], { type: 'text/html;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            
-            // 오늘 날짜로 파일명 지정
-            const today = new Date().toISOString().split('T')[0];
-            a.download = `핑구네_가계부분석_${today}.html`;
-            
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            // 완료 메시지
-            statusText.textContent = '✅ 공유용 HTML 파일 다운로드 완료!';
+            // 생성 완료 UI 업데이트
+            statusText.textContent = '✅ 안전한 공유 링크 생성 완료!';
             linkContainer.innerHTML = `
-                <div class="bg-sky-50 p-4 rounded-lg border border-sky-200">
-                    <p class="text-slate-700 font-medium mb-2">🎉 다운로드된 <b>.html 파일</b>을 카카오톡 PC버전 등으로 아내분께 전송해 보세요!</p>
-                    <p class="text-sm text-slate-600">받으신 분은 엑셀 파일 없이, 파일을 클릭하기만 하면 브라우저가 열리며 <b>현재 보시는 화면과 똑같이 움직이는 탭과 차트</b>를 확인할 수 있습니다. 외부 서버를 거치지 않으므로 개인정보도 100% 안전합니다.</p>
+                <div class="mt-2 flex items-center gap-2">
+                    <input id="share-url-input" type="text" value="${finalUrl}" class="w-full border rounded-md p-2 bg-slate-50 font-mono text-xs text-slate-500" readonly>
+                    <button id="copy-url-btn" class="btn btn-primary flex-shrink-0">복사하기</button>
                 </div>
+                <p class="text-sm text-slate-600 mt-3">이 링크를 복사해서 아내분께 카카오톡으로 보내세요. 터치하면 <b>앱 내부에서 완벽하게 동작하는 대시보드</b>가 즉시 열립니다.</p>
             `;
+
+            // 복사 버튼 이벤트
+            const copyBtn = document.getElementById('copy-url-btn');
+            const urlInput = document.getElementById('share-url-input');
+            if(copyBtn && urlInput) {
+                copyBtn.addEventListener('click', () => {
+                    urlInput.select();
+                    try {
+                        document.execCommand('copy');
+                        copyBtn.textContent = '복사 완료!';
+                        copyBtn.classList.replace('btn-primary', 'btn-secondary');
+                        setTimeout(() => { 
+                            copyBtn.textContent = '복사하기'; 
+                            copyBtn.classList.replace('btn-secondary', 'btn-primary');
+                        }, 2000);
+                    } catch(e) {
+                        __log('복사 실패', e);
+                    }
+                });
+            }
+
         } catch (error) {
-            __log('❌ 파일 생성 실패:', error);
-            statusText.textContent = '❌ 파일 생성에 실패했습니다.';
+            __log('❌ 링크 생성 실패:', error);
+            statusText.textContent = '❌ 링크 생성에 실패했습니다.';
+            linkContainer.innerHTML = `<p class="text-red-500 text-sm">${error.message}</p>`;
         }
     }
+
 
     // ===== Main runner =====
     async function run(){
       try{
         setStatus(true,'파일 읽는 중...');
-        __log('▶️ 분석 시작');
         const runButton = document.getElementById('runBtn');
         runButton.disabled = true;
         const files = [document.getElementById('file1').files[0], document.getElementById('file2').files[0]].filter(Boolean);
@@ -1095,7 +1082,8 @@
         }
 
         const parsedFS = [], parsedCF = [], allTransactions = [];
-        for(const f of files){
+        for(let i=0; i<files.length; i++){
+          const f = files[i];
           const buf = await readFileAsArrayBuffer(f);
           setStatus(true, `'${f.name}' 파싱 중...`);
           const wb = XLSX.read(buf, { type: 'array', cellDates:true });
@@ -1111,18 +1099,24 @@
           const sheetTX = pickBangsaelSheet(wb, '가계부 내역');
           if (sheetTX) {
               const rows = XLSX.utils.sheet_to_json(sheetTX, { header: 1 }); 
-              allTransactions.push(...parseTransactions(rows));
+              const txs = parseTransactions(rows);
+              for(let j=0; j<txs.length; j++) allTransactions.push(txs[j]);
           }
         }
         setStatus(true, '결과를 합치는 중...');
-        const assets = parsedFS.flatMap(r=> r.assets||[]);
-        const liabilities = parsedFS.flatMap(r=> r.liabilities||[]);
-        assets.forEach((it,i)=> it.id = 'A'+i);
+        
+        let assets = [];
+        let liabilities = [];
+        for (let i = 0; i < parsedFS.length; i++) {
+            if (parsedFS[i].assets) assets = assets.concat(parsedFS[i].assets);
+            if (parsedFS[i].liabilities) liabilities = liabilities.concat(parsedFS[i].liabilities);
+        }
+        for (let i = 0; i < assets.length; i++) assets[i].id = 'A' + i;
 
         const selectedAssetIds = new Set(assets.map(it=>it.id));
         const cfMerged = mergeCashflowResults(parsedCF);
         
-        window.__data = { assets, liabilities, selectedAssetIds };
+        window.__data = { assets: assets, liabilities: liabilities, selectedAssetIds: selectedAssetIds };
         window.__cf = cfMerged;
         window.__transactions = allTransactions;
         
@@ -1159,33 +1153,76 @@
       }
     }
     
-    // ===== 초기화 =====
-    document.addEventListener('DOMContentLoaded', () => {
-        __log('✅ DOM 로드 완료.');
+    // ===== URL 파라미터 읽기 및 앱 초기화 =====
+    function initApp() {
+        __log('✅ 초기화 시작.');
         setupUI();
 
-        // 공유용 파일이 열렸을 때 (데이터 내장)
-        if (window.__isShared) {
-            __log('✅ 공유용 파일 모드로 실행됩니다.');
-            document.getElementById('upload-section').classList.add('hidden');
-            document.getElementById('results-section').classList.remove('hidden');
-            
-            // 데이터 렌더링
-            renderAll();
-            
-            // 공유 화면에서는 기능 숨기기
-            const exportBtn = document.getElementById('exportBtn');
-            if(exportBtn) exportBtn.style.display = 'none'; 
+        // 주소창에서 공유된 데이터(data 파라미터) 확인
+        const urlParams = new URLSearchParams(window.location.search);
+        const compressedData = urlParams.get('data');
+
+        if (compressedData) {
+            __log('✅ 공유된 URL 데이터를 감지했습니다. 해독을 시작합니다.');
+            document.getElementById('upload-ui').classList.add('hidden');
+            document.getElementById('shared-loading-ui').classList.remove('hidden');
+
+            try {
+                // 데이터 압축 해제 및 복원
+                const jsonString = LZString.decompressFromEncodedURIComponent(compressedData);
+                const payload = JSON.parse(jsonString);
+
+                window.__isSharedUrlData = true; // 공유 모드 플래그
+                
+                // 데이터 원상복구
+                window.__data = {
+                    assets: payload.d.a,
+                    liabilities: payload.d.l,
+                    selectedAssetIds: new Set(payload.d.s)
+                };
+                
+                if (payload.c) {
+                    window.__cf = {
+                        monthly: payload.c.m,
+                        incomeCategories: new Map(payload.c.i),
+                        expenseCategories: new Map(payload.c.e)
+                    };
+                } else {
+                    window.__cf = null;
+                }
+                
+                window.__transactions = payload.t;
+
+                // UI 전환 및 렌더링
+                setTimeout(() => {
+                    document.getElementById('upload-section').classList.add('hidden');
+                    document.getElementById('results-section').classList.remove('hidden');
+                    
+                    // 공유 모드에서는 다시 공유하는 버튼 숨기기
+                    const exportBtn = document.getElementById('exportBtn');
+                    if(exportBtn) exportBtn.style.display = 'none'; 
+                    
+                    renderAll();
+                }, 500); // 로딩 UI를 잠깐 보여주기 위한 딜레이
+
+            } catch (e) {
+                __log('❌ 데이터 해독 실패:', e);
+                alert("잘못되거나 손상된 공유 링크입니다. 초기 화면으로 돌아갑니다.");
+                window.location.href = window.location.pathname; // 쿼리스트링 떼고 새로고침
+            }
+
         } else {
-            // 본인이 처음 파일을 열었을 때 (업로드 창 띄우기)
-            document.getElementById('upload-section').classList.remove('hidden');
+            // 파라미터가 없으면 일반 업로드 모드
+            const uSec = document.getElementById('upload-section');
+            if (uSec) uSec.classList.remove('hidden');
         }
 
         const runBtn = document.getElementById('runBtn');
         if(runBtn) runBtn.addEventListener('click', run);
         
+        // 새로 만든 링크 생성 함수 연결
         const exportBtn = document.getElementById('exportBtn');
-        if(exportBtn) exportBtn.addEventListener('click', exportAsHTMLFile);
+        if(exportBtn) exportBtn.addEventListener('click', generateShareableLink);
         
         const resetBtn = document.getElementById('resetBtn');
         if(resetBtn) resetBtn.addEventListener('click', () => { window.location.href = window.location.pathname; });
@@ -1193,19 +1230,27 @@
         const cashflowEl = document.getElementById('cashflow');
         if(cashflowEl) {
              cashflowEl.addEventListener('click', (e) => {
-                const row = e.target.closest('.category-row');
-                if (row) {
-                    const category = row.dataset.category;
-                    const type = row.dataset.type;
-                     if (category && type) showTransactionModal(category, type);
+                let row = e.target;
+                while (row && row !== document && (!row.classList || !row.classList.contains('category-row'))) {
+                    row = row.parentNode;
+                }
+                if (row && row !== document) {
+                    const category = row.getAttribute('data-category');
+                    const type = row.getAttribute('data-type');
+                    if (category && type) showTransactionModal(category, type);
                 }
             });
              cashflowEl.addEventListener('change', (e) => {
                  if (e.target.id === 'month-selector') renderCategoryTables(e.target.value);
              });
         }
-    });
+    }
 
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+        initApp();
+    }
   </script>
 </body>
 </html>
