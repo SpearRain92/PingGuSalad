@@ -517,6 +517,8 @@
         try {
             btn.disabled = true; btn.innerText = "동기화 중...";
             const payload = { data: { a: window.__data.assets, l: window.__data.liabilities, s: Array.from(window.__data.selectedAssetIds) }, cf: window.__cf ? { m: window.__cf.monthly, i: Array.from(window.__cf.incomeCategories), e: Array.from(window.__cf.expenseCategories) } : null, t: window.__transactions || [] };
+            
+            // 기존 GIST_ID가 있으면 덮어쓰기(PATCH), 없으면 새로 생성(POST)
             const method = GIST_ID ? 'PATCH' : 'POST';
             const url = GIST_ID ? `https://api.github.com/gists/${GIST_ID}` : 'https://api.github.com/gists';
             
@@ -545,10 +547,10 @@
             }
 
             const d = await res.json();
-            if (!GIST_ID) { 
-                GIST_ID = d.id; 
-                localStorage.setItem('pingu_gist_id', GIST_ID); 
-            }
+            
+            // 응답받은 데이터의 ID를 저장 (POST로 새로 생성된 경우 필수, PATCH인 경우 동일함)
+            GIST_ID = d.id; 
+            localStorage.setItem('pingu_gist_id', GIST_ID); 
             
             // 공유용 URL 생성 (토큰 없이 읽기만 가능한 주소)
             const sUrl = new URL(window.location.href); 
