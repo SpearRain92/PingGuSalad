@@ -7,6 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- LZString (데이터 압축용) -->
   <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -168,9 +169,8 @@
   </div>
 
   <script>
-    // ===== 🔥 중요: GitHub Gist 연동 설정 🔥 =====
-    // 발급받은 Personal Access Token (gist 권한 포함)을 아래 입력하세요.
-    const GITHUB_TOKEN = "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"; 
+    // ===== 🔥 보안 개선: 전역 변수로 토큰을 박아두지 않습니다. 🔥 =====
+    // 로컬 스토리지에서만 GIST ID를 관리합니다.
     let GIST_ID = localStorage.getItem('pingu_gist_id') || "";
 
     // ===== UI Setup Functions =====
@@ -497,43 +497,103 @@
         if (window.__cf) { renderCashflowSummary(window.__cf); renderCashflowDetails(window.__cf); }
     }
 
-    // ===== Sync & Load =====
+    // ===== 🚀 보안 강화된 Gist 동기화 로직 🚀 =====
     async function syncToGist() {
-        if (!GITHUB_TOKEN) { showMessage("설정 필요", "GITHUB_TOKEN이 없습니다. 코드 상단에서 설정해주세요."); return; }
+        // 브라우저 로컬 스토리지에 토큰이 있는지 확인합니다.
+        let localToken = localStorage.getItem('pingu_github_token');
+        
+        // 토큰이 없다면 브라우저 알림창으로 물어봅니다. (코드에 하드코딩되지 않아 안전합니다)
+        if (!localToken) {
+            localToken = prompt("보안 연결을 위해 발급받은 GitHub Personal Access Token (ghp_...)을 입력해주세요.\n\n※ 이 토큰은 현재 PC의 브라우저에만 안전하게 저장되며 외부로 유출되지 않습니다.");
+            if (!localToken) {
+                showMessage("안내", "토큰 입력이 취소되었습니다. 동기화를 진행할 수 없습니다.");
+                return;
+            }
+            // 입력받은 토큰을 로컬 스토리지에 저장합니다.
+            localStorage.setItem('pingu_github_token', localToken.trim());
+        }
+
         const btn = document.getElementById('exportBtn');
         try {
             btn.disabled = true; btn.innerText = "동기화 중...";
             const payload = { data: { a: window.__data.assets, l: window.__data.liabilities, s: Array.from(window.__data.selectedAssetIds) }, cf: window.__cf ? { m: window.__cf.monthly, i: Array.from(window.__cf.incomeCategories), e: Array.from(window.__cf.expenseCategories) } : null, t: window.__transactions || [] };
             const method = GIST_ID ? 'PATCH' : 'POST';
             const url = GIST_ID ? `https://api.github.com/gists/${GIST_ID}` : 'https://api.github.com/gists';
-            const res = await fetch(url, { method, headers: { 'Authorization': `token ${GITHUB_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ description: "Pingu Data", public: false, files: { "pingu_data.json": { content: JSON.stringify(payload) } } }) });
-            if (!res.ok) throw new Error("Gist API 호출 실패");
+            
+            const res = await fetch(url, { 
+                method, 
+                headers: { 
+                    'Authorization': `token ${localToken}`, 
+                    'Content-Type': 'application/json' 
+                }, 
+                body: JSON.stringify({ 
+                    description: "Pingu Data", 
+                    public: false, // Secret Gist (주소를 아는 사람만 접근 가능)
+                    files: { "pingu_data.json": { content: JSON.stringify(payload) } } 
+                }) 
+            });
+
+            if (!res.ok) {
+                // 토큰이 틀렸거나 권한이 없는 경우 로컬 스토리지에서 삭제하여 다시 입력받도록 유도
+                if (res.status === 401 || res.status === 403 || res.status === 404) {
+                    localStorage.removeItem('pingu_github_token');
+                    GIST_ID = ""; // Gist가 삭제되었을 수도 있으므로 ID도 초기화
+                    localStorage.removeItem('pingu_gist_id');
+                    throw new Error("토큰이 만료되었거나 권한이 없습니다. 다시 시도하여 새로운 토큰을 입력해주세요.");
+                }
+                throw new Error("동기화 통신 중 오류가 발생했습니다.");
+            }
+
             const d = await res.json();
-            if (!GIST_ID) { GIST_ID = d.id; localStorage.setItem('pingu_gist_id', GIST_ID); }
-            const sUrl = new URL(window.location.href); sUrl.searchParams.set('gist', GIST_ID);
-            showMessage("동기화 완료", `<p class="mb-2 text-sm">아래 링크를 카카오톡 공지에 올리세요!</p><input id="sur" value="${sUrl}" class="w-full border p-2 text-xs font-mono mb-2" readonly><button onclick="document.getElementById('sur').select();document.execCommand('copy');alert('복사되었습니다')" class="btn btn-primary w-full">링크 복사</button>`);
-        } catch (e) { showMessage("오류", e.message); } finally { btn.disabled = false; btn.innerText = "🚀 클라우드 동기화"; }
+            if (!GIST_ID) { 
+                GIST_ID = d.id; 
+                localStorage.setItem('pingu_gist_id', GIST_ID); 
+            }
+            
+            // 공유용 URL 생성 (토큰 없이 읽기만 가능한 주소)
+            const sUrl = new URL(window.location.href); 
+            sUrl.searchParams.set('gist', GIST_ID);
+            
+            showMessage("동기화 완료", `<p class="mb-2 text-sm">데이터가 비밀 공간에 덮어씌워졌습니다!<br>아래 링크를 카카오톡 공지에 올리세요.</p><input id="sur" value="${sUrl}" class="w-full border p-2 text-xs font-mono mb-2 bg-slate-50" readonly><button onclick="document.getElementById('sur').select();document.execCommand('copy');this.innerText='복사완료!'" class="btn btn-primary w-full">링크 복사하기</button>`);
+        } catch (e) { 
+            showMessage("동기화 실패", `<p class="text-red-500">${e.message}</p>`); 
+        } finally { 
+            btn.disabled = false; btn.innerText = "🚀 클라우드 동기화"; 
+        }
     }
 
+    // ===== Gist에서 데이터 불러오기 (토큰 필요 없음) =====
     async function loadFromGist(id) {
         try {
             document.getElementById('upload-ui').classList.add('hidden');
             document.getElementById('shared-loading-ui').classList.remove('hidden');
+            
+            // 읽기 작업은 토큰이 없어도 가능합니다 (Secret Gist라도 ID를 알면 읽을 수 있음)
             const res = await fetch(`https://api.github.com/gists/${id}`);
-            if (!res.ok) throw new Error("로드 실패");
+            if (!res.ok) throw new Error("데이터를 찾을 수 없습니다.");
+            
             const gist = await res.json();
+            if (!gist.files || !gist.files['pingu_data.json']) throw new Error("올바른 데이터 파일이 아닙니다.");
+            
             const payload = JSON.parse(gist.files['pingu_data.json'].content);
             window.__isSharedUrlData = true;
             window.__data = { assets: payload.data.a, liabilities: payload.data.l, selectedAssetIds: new Set(payload.data.s) };
             if (payload.cf) window.__cf = { monthly: payload.cf.m, incomeCategories: new Map(payload.cf.i), expenseCategories: new Map(payload.cf.e) };
             window.__transactions = payload.t;
+            
             document.getElementById('upload-section').classList.add('hidden');
             document.getElementById('results-section').classList.remove('hidden');
+            
+            // 공유 모드에서는 동기화 버튼 숨기기 (읽기 전용)
             const eBtn = document.getElementById('exportBtn'); if(eBtn) eBtn.style.display = 'none';
             renderAll();
-        } catch (e) { alert("로드 오류: " + e.message); window.location.href = window.location.pathname; }
+        } catch (e) { 
+            alert("공유 데이터를 불러오는 중 오류가 발생했습니다.\n" + e.message); 
+            window.location.href = window.location.pathname; 
+        }
     }
 
+    // ===== Main runner (엑셀 파일 처리) =====
     async function run() {
         const btn = document.getElementById('runBtn');
         try {
@@ -562,24 +622,31 @@
             window.__data = { assets: a, liabilities: l, selectedAssetIds: new Set(a.map(it => it.id)) };
             window.__cf = mergeCashflowResults(pCF);
             window.__transactions = allT;
+            
+            window.__isSharedUrlData = false; // 엑셀을 직접 올린 관리자 모드
             document.getElementById('upload-section').classList.add('hidden');
             document.getElementById('results-section').classList.remove('hidden');
             renderAll();
-            setStatus(false, "분석 완료");
+            setStatus(false, "");
         } catch (e) { __log(e); setStatus(false, "오류: " + e.message); } finally { btn.disabled = false; }
     }
 
     function initApp() {
         setupUI();
+        
+        // URL 주소에 '?gist=고유번호' 가 붙어있다면 공유 모드로 실행
         const gistId = new URLSearchParams(window.location.search).get('gist');
-        if (gistId) loadFromGist(gistId);
-        else document.getElementById('upload-section').classList.remove('hidden');
+        if (gistId) {
+            loadFromGist(gistId);
+        } else {
+            document.getElementById('upload-section').classList.remove('hidden');
+        }
         
         document.getElementById('runBtn').onclick = run;
         document.getElementById('exportBtn').onclick = syncToGist;
         document.getElementById('resetBtn').onclick = () => window.location.href = window.location.pathname;
 
-        // 체크박스 핸들러
+        // 체크박스 상태 변경 핸들러
         document.body.addEventListener('change', (e) => {
             if (e.target.classList.contains('asset-select')) {
                 const id = e.target.getAttribute('data-id');
@@ -591,7 +658,7 @@
             }
         });
         
-        // 상세 내역 클릭 핸들러
+        // 상세 내역 모달 열기 핸들러
         document.getElementById('results-section').addEventListener('click', (e) => {
             const row = e.target.closest('.category-row');
             if (row) showTransactionModal(row.dataset.category, row.dataset.type);
