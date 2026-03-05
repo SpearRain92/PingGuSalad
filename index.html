@@ -169,8 +169,9 @@
   </div>
 
   <script>
-    // ===== 🔥 보안 개선: 전역 변수로 토큰을 박아두지 않습니다. 🔥 =====
-    // 로컬 스토리지에서만 GIST ID를 관리합니다.
+    // ===== 🔥 중요: GitHub Gist 연동 설정 🔥 =====
+    // 발급받은 Personal Access Token (gist 권한 포함)을 아래 입력하세요.
+    const GITHUB_TOKEN = ""; 
     let GIST_ID = localStorage.getItem('pingu_gist_id') || "";
 
     // ===== UI Setup Functions =====
@@ -403,7 +404,11 @@
     function renderCharts(assets, liabilities) {
         if (!window.Chart) return;
         const aSum = assets.reduce((s, r) => s + r.금액, 0), lSum = liabilities.reduce((s, r) => s + r.금액, 0);
-        destroyCharts();
+        
+        // Destroy only asset/liab charts to not disturb cashflow if not needed
+        if(charts.pie) charts.pie.destroy();
+        if(charts.barAsset) charts.barAsset.destroy();
+        
         document.getElementById('charts').innerHTML = `<div class="card p-4 lg:col-span-1"><h3>자산 비중</h3><div class="h-64"><canvas id="pieTotal"></canvas></div></div><div class="card p-4 lg:col-span-2"><h3>항목별 자산</h3><div class="h-64"><canvas id="barAsset"></canvas></div></div>`;
         charts.pie = new Chart(document.getElementById('pieTotal'), { type: 'doughnut', data: { labels: ['자산', '부채'], datasets: [{ data: [aSum, lSum], backgroundColor: ['#10b981', '#f43f5e'] }] }, options: { maintainAspectRatio: false } });
         const cats = computeCategoryTotals(assets);
@@ -461,6 +466,10 @@
         wrap.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="card p-4"><h3>월별 흐름</h3><div class="h-72"><canvas id="cfMonthly"></canvas></div></div><div class="card p-4"><h3>상위 지출</h3><div class="h-72"><canvas id="cfCat"></canvas></div></div></div><div class="mt-6"><div class="flex justify-between items-center mb-4"><h3>상세 내역</h3><select id="month-selector" class="border rounded px-2"><option value="overall">전체</option>${cf.monthly.map(m => `<option value="${m.ym}">${m.ym}</option>`).join('')}</select></div><div id="monthly-category-summary"></div></div>`;
         renderCategoryTables('overall');
         if (!window.Chart) return;
+        
+        if(charts.cfMonthly) charts.cfMonthly.destroy();
+        if(charts.cfCat) charts.cfCat.destroy();
+
         charts.cfMonthly = new Chart(document.getElementById('cfMonthly'), {type:'bar',data:{labels:cf.monthly.map(m=>m.ym.slice(2)),datasets:[{label:'수입',data:cf.monthly.map(m=>m.income),backgroundColor:'#10b981'},{label:'지출',data:cf.monthly.map(m=>m.expense),backgroundColor:'#f43f5e'}]},options:{maintainAspectRatio:false}});
         const top8 = eCatP.slice(0, 8);
         charts.cfCat = new Chart(document.getElementById('cfCat'), {type:'doughnut',data:{labels:top8.map(c=>c[0]),datasets:[{data:top8.map(c=>c[1]),backgroundColor:['#f43f5e','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#06b6d4']}]},options:{maintainAspectRatio:false}});
@@ -486,7 +495,8 @@
         document.getElementById('transaction-modal').classList.remove('hidden');
     }
 
-    function renderAll() {
+    // 화면 갱신 최적화 (자산 체크박스 누를때마다 현금흐름 탭이 초기화되는 문제 방지)
+    function renderAssetUpdatesOnly() {
         if (!window.__data) return;
         const sel = window.__data.assets.filter(it => window.__data.selectedAssetIds.has(it.id));
         renderSummary(sel, window.__data.liabilities, window.__isSharedUrlData);
@@ -494,108 +504,53 @@
         const aTable = renderAssetGroupedTableWithCheckboxes('자산 현황', window.__data.assets, window.__data.selectedAssetIds);
         const lTable = renderGroupedTable('부채 현황', window.__data.liabilities);
         document.getElementById('result').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">${aTable}${lTable}</div>`;
-        if (window.__cf) { renderCashflowSummary(window.__cf); renderCashflowDetails(window.__cf); }
     }
 
-    // ===== 🚀 보안 강화된 Gist 동기화 로직 🚀 =====
-    async function syncToGist() {
-        // 브라우저 로컬 스토리지에 토큰이 있는지 확인합니다.
-        let localToken = localStorage.getItem('pingu_github_token');
-        
-        // 토큰이 없다면 브라우저 알림창으로 물어봅니다. (코드에 하드코딩되지 않아 안전합니다)
-        if (!localToken) {
-            localToken = prompt("보안 연결을 위해 발급받은 GitHub Personal Access Token (ghp_...)을 입력해주세요.\n\n※ 이 토큰은 현재 PC의 브라우저에만 안전하게 저장되며 외부로 유출되지 않습니다.");
-            if (!localToken) {
-                showMessage("안내", "토큰 입력이 취소되었습니다. 동기화를 진행할 수 없습니다.");
-                return;
-            }
-            // 입력받은 토큰을 로컬 스토리지에 저장합니다.
-            localStorage.setItem('pingu_github_token', localToken.trim());
+    function renderAll() {
+        renderAssetUpdatesOnly();
+        if (window.__cf) { 
+            renderCashflowSummary(window.__cf); 
+            renderCashflowDetails(window.__cf); 
         }
+    }
 
+    // ===== 🚀 Sync & Load =====
+    async function syncToGist() {
+        if (!GITHUB_TOKEN) { showMessage("설정 필요", "코드 상단에 GITHUB_TOKEN을 입력해주세요."); return; }
         const btn = document.getElementById('exportBtn');
         try {
             btn.disabled = true; btn.innerText = "동기화 중...";
             const payload = { data: { a: window.__data.assets, l: window.__data.liabilities, s: Array.from(window.__data.selectedAssetIds) }, cf: window.__cf ? { m: window.__cf.monthly, i: Array.from(window.__cf.incomeCategories), e: Array.from(window.__cf.expenseCategories) } : null, t: window.__transactions || [] };
-            
-            // 기존 GIST_ID가 있으면 덮어쓰기(PATCH), 없으면 새로 생성(POST)
             const method = GIST_ID ? 'PATCH' : 'POST';
             const url = GIST_ID ? `https://api.github.com/gists/${GIST_ID}` : 'https://api.github.com/gists';
-            
-            const res = await fetch(url, { 
-                method, 
-                headers: { 
-                    'Authorization': `token ${localToken}`, 
-                    'Content-Type': 'application/json' 
-                }, 
-                body: JSON.stringify({ 
-                    description: "Pingu Data", 
-                    public: false, // Secret Gist (주소를 아는 사람만 접근 가능)
-                    files: { "pingu_data.json": { content: JSON.stringify(payload) } } 
-                }) 
-            });
-
-            if (!res.ok) {
-                // 토큰이 틀렸거나 권한이 없는 경우 로컬 스토리지에서 삭제하여 다시 입력받도록 유도
-                if (res.status === 401 || res.status === 403 || res.status === 404) {
-                    localStorage.removeItem('pingu_github_token');
-                    GIST_ID = ""; // Gist가 삭제되었을 수도 있으므로 ID도 초기화
-                    localStorage.removeItem('pingu_gist_id');
-                    throw new Error("토큰이 만료되었거나 권한이 없습니다. 다시 시도하여 새로운 토큰을 입력해주세요.");
-                }
-                throw new Error("동기화 통신 중 오류가 발생했습니다.");
-            }
-
+            const res = await fetch(url, { method, headers: { 'Authorization': `token ${GITHUB_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ description: "Pingu Data", public: false, files: { "pingu_data.json": { content: JSON.stringify(payload) } } }) });
+            if (!res.ok) throw new Error("Gist API 호출에 실패했습니다. 토큰 권한을 확인해주세요.");
             const d = await res.json();
-            
-            // 응답받은 데이터의 ID를 저장 (POST로 새로 생성된 경우 필수, PATCH인 경우 동일함)
-            GIST_ID = d.id; 
-            localStorage.setItem('pingu_gist_id', GIST_ID); 
-            
-            // 공유용 URL 생성 (토큰 없이 읽기만 가능한 주소)
-            const sUrl = new URL(window.location.href); 
-            sUrl.searchParams.set('gist', GIST_ID);
-            
-            showMessage("동기화 완료", `<p class="mb-2 text-sm">데이터가 비밀 공간에 덮어씌워졌습니다!<br>아래 링크를 카카오톡 공지에 올리세요.</p><input id="sur" value="${sUrl}" class="w-full border p-2 text-xs font-mono mb-2 bg-slate-50" readonly><button onclick="document.getElementById('sur').select();document.execCommand('copy');this.innerText='복사완료!'" class="btn btn-primary w-full">링크 복사하기</button>`);
-        } catch (e) { 
-            showMessage("동기화 실패", `<p class="text-red-500">${e.message}</p>`); 
-        } finally { 
-            btn.disabled = false; btn.innerText = "🚀 클라우드 동기화"; 
-        }
+            if (!GIST_ID) { GIST_ID = d.id; localStorage.setItem('pingu_gist_id', GIST_ID); }
+            const sUrl = new URL(window.location.href); sUrl.searchParams.set('gist', GIST_ID);
+            showMessage("동기화 완료", `<p class="mb-2 text-sm">클라우드 덮어쓰기 완료! 아래 링크를 복사하세요.</p><input id="sur" value="${sUrl}" class="w-full border p-2 text-xs font-mono mb-2 bg-slate-50" readonly><button onclick="document.getElementById('sur').select();document.execCommand('copy');this.innerText='복사완료!'" class="btn btn-primary w-full">링크 복사하기</button>`);
+        } catch (e) { showMessage("동기화 오류", e.message); } finally { btn.disabled = false; btn.innerText = "🚀 클라우드 동기화"; }
     }
 
-    // ===== Gist에서 데이터 불러오기 (토큰 필요 없음) =====
     async function loadFromGist(id) {
         try {
             document.getElementById('upload-ui').classList.add('hidden');
             document.getElementById('shared-loading-ui').classList.remove('hidden');
-            
-            // 읽기 작업은 토큰이 없어도 가능합니다 (Secret Gist라도 ID를 알면 읽을 수 있음)
             const res = await fetch(`https://api.github.com/gists/${id}`);
-            if (!res.ok) throw new Error("데이터를 찾을 수 없습니다.");
-            
+            if (!res.ok) throw new Error("데이터를 가져오는데 실패했습니다.");
             const gist = await res.json();
-            if (!gist.files || !gist.files['pingu_data.json']) throw new Error("올바른 데이터 파일이 아닙니다.");
-            
             const payload = JSON.parse(gist.files['pingu_data.json'].content);
             window.__isSharedUrlData = true;
             window.__data = { assets: payload.data.a, liabilities: payload.data.l, selectedAssetIds: new Set(payload.data.s) };
             if (payload.cf) window.__cf = { monthly: payload.cf.m, incomeCategories: new Map(payload.cf.i), expenseCategories: new Map(payload.cf.e) };
             window.__transactions = payload.t;
-            
             document.getElementById('upload-section').classList.add('hidden');
             document.getElementById('results-section').classList.remove('hidden');
-            
-            // 공유 모드에서는 동기화 버튼 숨기기 (읽기 전용)
             const eBtn = document.getElementById('exportBtn'); if(eBtn) eBtn.style.display = 'none';
             renderAll();
-        } catch (e) { 
-            alert("공유 데이터를 불러오는 중 오류가 발생했습니다.\n" + e.message); 
-            window.location.href = window.location.pathname; 
-        }
+        } catch (e) { alert("데이터 로드 오류: " + e.message); window.location.href = window.location.pathname; }
     }
 
-    // ===== Main runner (엑셀 파일 처리) =====
     async function run() {
         const btn = document.getElementById('runBtn');
         try {
@@ -625,7 +580,7 @@
             window.__cf = mergeCashflowResults(pCF);
             window.__transactions = allT;
             
-            window.__isSharedUrlData = false; // 엑셀을 직접 올린 관리자 모드
+            window.__isSharedUrlData = false; 
             document.getElementById('upload-section').classList.add('hidden');
             document.getElementById('results-section').classList.remove('hidden');
             renderAll();
@@ -636,27 +591,28 @@
     function initApp() {
         setupUI();
         
-        // URL 주소에 '?gist=고유번호' 가 붙어있다면 공유 모드로 실행
         const gistId = new URLSearchParams(window.location.search).get('gist');
-        if (gistId) {
-            loadFromGist(gistId);
-        } else {
-            document.getElementById('upload-section').classList.remove('hidden');
-        }
+        if (gistId) loadFromGist(gistId);
+        else document.getElementById('upload-section').classList.remove('hidden');
         
         document.getElementById('runBtn').onclick = run;
         document.getElementById('exportBtn').onclick = syncToGist;
         document.getElementById('resetBtn').onclick = () => window.location.href = window.location.pathname;
 
-        // 체크박스 상태 변경 핸들러
+        // ===== 🚀 핵심 버그 해결: 체크박스 및 월별 선택박스 이벤트 핸들러 추가 =====
         document.body.addEventListener('change', (e) => {
+            // 1. 자산 체크박스 끄고 켤 때
             if (e.target.classList.contains('asset-select')) {
                 const id = e.target.getAttribute('data-id');
                 if (window.__data) {
                     if (e.target.checked) window.__data.selectedAssetIds.add(id);
                     else window.__data.selectedAssetIds.delete(id);
-                    renderAll();
+                    renderAssetUpdatesOnly(); // 전체 렌더링 대신 자산 부분만 다시 그림 (현금흐름 탭 초기화 방지)
                 }
+            } 
+            // 2. 누락되었던 월별 선택 드롭다운(Month Selector) 값 변경 이벤트 복구!
+            else if (e.target.id === 'month-selector') {
+                renderCategoryTables(e.target.value);
             }
         });
         
@@ -671,3 +627,5 @@
   </script>
 </body>
 </html>
+
+
