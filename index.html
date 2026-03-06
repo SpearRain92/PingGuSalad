@@ -170,8 +170,7 @@
 
   <script>
     // ===== 🔥 중요: GitHub Gist 연동 설정 🔥 =====
-    // 발급받은 Personal Access Token (gist 권한 포함)을 아래 입력하세요.
-    const GITHUB_TOKEN = ""; 
+    const GITHUB_TOKEN = ""; // 👈 여기에 발급받은 ghp_... 토큰을 다시 입력해주세요.
     let GIST_ID = localStorage.getItem('pingu_gist_id') || "";
 
     // ===== UI Setup Functions =====
@@ -376,20 +375,55 @@
       return { monthly: window.map(ym=>({ ym, income:monthlyMap.get(ym).income, expense:monthlyMap.get(ym).expense })), incomeCategories: incomeCatMap, expenseCategories: expenseCatMap };
     }
     
+    // 💡 버그 3 해결: 숨김내역 완벽 차단 및 타입 유연화
     function parseTransactions(rows) {
-        let hIdx = rows.findIndex(row => row.includes('날짜') && row.includes('대분류') && row.includes('금액') && row.includes('타입'));
+        let hIdx = rows.findIndex(row => {
+            if (!Array.isArray(row)) return false;
+            const strRow = row.map(c => String(c || '').trim());
+            return strRow.includes('날짜') && strRow.includes('대분류') && strRow.includes('금액');
+        });
         if (hIdx === -1) return [];
         const h = rows[hIdx].map(h => String(h || '').trim());
-        const dIdx = h.indexOf('날짜'), cIdx = h.indexOf('대분류'), coIdx = h.indexOf('내용'), aIdx = h.indexOf('금액'), tIdx = h.indexOf('타입');
-        if ([dIdx, cIdx, aIdx, tIdx].includes(-1)) return [];
+        const dIdx = h.indexOf('날짜'), cIdx = h.indexOf('대분류'), coIdx = h.indexOf('내용'), aIdx = h.indexOf('금액');
+        
+        let tIdx = h.indexOf('타입');
+        if (tIdx === -1) tIdx = h.indexOf('수입/지출');
+        if (tIdx === -1) tIdx = h.findIndex(c => c.includes('분류') && c !== '대분류' && c !== '소분류');
+        
+        // 숨김 관련 열 찾기
+        let hiddenIdx = h.findIndex(c => c.includes('숨김'));
+        if (hiddenIdx === -1) hiddenIdx = h.findIndex(c => c === '상태');
+
+        if ([dIdx, cIdx, aIdx].includes(-1)) return [];
         const txs = [];
+        
         for (let i = hIdx + 1; i < rows.length; i++) {
-            const r = rows[i]; if (!Array.isArray(r) || r.length <= Math.max(dIdx, cIdx, aIdx, tIdx)) continue;
+            const r = rows[i]; if (!Array.isArray(r) || r.length <= Math.max(dIdx, cIdx, aIdx)) continue;
+            
+            const contentStr = String(r[coIdx]||'').trim();
+            const catStr = String(r[cIdx]||'').trim();
+            
+            // 🔥 숨김 항목 제외 로직
+            let isHidden = false;
+            if (hiddenIdx !== -1 && String(r[hiddenIdx]||'').includes('숨김')) isHidden = true;
+            if (contentStr.includes('(숨김)') || contentStr.includes('[숨김]')) isHidden = true;
+            if (catStr.includes('(숨김)') || catStr.includes('[숨김]')) isHidden = true;
+
             const amt = parseNumber(r[aIdx]); if (amt == null) continue;
             let date = String(r[dIdx] || '');
             if (typeof r[dIdx] === 'number') { const d = XLSX.SSF.parse_date_code(r[dIdx]); if (d) date = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`; }
             else if (r[dIdx] instanceof Date) date = r[dIdx].toISOString().split('T')[0];
-            if (/^\d{4}-\d{2}-\d{2}$/.test(date)) txs.push({ date, category: String(r[cIdx]||'미분류').trim(), content: String(r[coIdx]||'').trim(), amount: amt, type: String(r[tIdx]||'').trim() });
+            
+            if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                txs.push({ 
+                    date, 
+                    category: catStr || '미분류', 
+                    content: contentStr, 
+                    amount: amt, 
+                    type: tIdx !== -1 ? String(r[tIdx]||'').trim() : '미분류',
+                    isHidden: isHidden
+                });
+            }
         }
         return txs;
     }
@@ -405,7 +439,6 @@
         if (!window.Chart) return;
         const aSum = assets.reduce((s, r) => s + r.금액, 0), lSum = liabilities.reduce((s, r) => s + r.금액, 0);
         
-        // Destroy only asset/liab charts to not disturb cashflow if not needed
         if(charts.pie) charts.pie.destroy();
         if(charts.barAsset) charts.barAsset.destroy();
         
@@ -462,40 +495,73 @@
     
     function renderCashflowDetails(cf){
         const wrap = document.getElementById('cashflow'); if (!wrap) return;
-        const eCatP = [...(cf.expenseCategories||new Map()).entries()].sort((a,b)=>b[1]-a[1]);
-        wrap.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="card p-4"><h3>월별 흐름</h3><div class="h-72"><canvas id="cfMonthly"></canvas></div></div><div class="card p-4"><h3>상위 지출</h3><div class="h-72"><canvas id="cfCat"></canvas></div></div></div><div class="mt-6"><div class="flex justify-between items-center mb-4"><h3>상세 내역</h3><select id="month-selector" class="border rounded px-2"><option value="overall">전체</option>${cf.monthly.map(m => `<option value="${m.ym}">${m.ym}</option>`).join('')}</select></div><div id="monthly-category-summary"></div></div>`;
-        renderCategoryTables('overall');
-        if (!window.Chart) return;
+        wrap.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="card p-4"><h3>월별 흐름</h3><div class="h-72"><canvas id="cfMonthly"></canvas></div></div><div class="card p-4"><h3>상위 지출</h3><div class="h-72"><canvas id="cfCat"></canvas></div></div></div><div class="mt-6"><div class="flex justify-between items-center mb-4"><h3>상세 내역</h3><select id="month-selector" class="border rounded px-2 py-1"><option value="overall">전체 기간</option>${cf.monthly.map(m => `<option value="${m.ym}">${m.ym}</option>`).join('')}</select></div><div id="monthly-category-summary"></div></div>`;
         
         if(charts.cfMonthly) charts.cfMonthly.destroy();
         if(charts.cfCat) charts.cfCat.destroy();
 
-        charts.cfMonthly = new Chart(document.getElementById('cfMonthly'), {type:'bar',data:{labels:cf.monthly.map(m=>m.ym.slice(2)),datasets:[{label:'수입',data:cf.monthly.map(m=>m.income),backgroundColor:'#10b981'},{label:'지출',data:cf.monthly.map(m=>m.expense),backgroundColor:'#f43f5e'}]},options:{maintainAspectRatio:false}});
-        const top8 = eCatP.slice(0, 8);
-        charts.cfCat = new Chart(document.getElementById('cfCat'), {type:'doughnut',data:{labels:top8.map(c=>c[0]),datasets:[{data:top8.map(c=>c[1]),backgroundColor:['#f43f5e','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#06b6d4']}]},options:{maintainAspectRatio:false}});
+        if (window.Chart) {
+            charts.cfMonthly = new Chart(document.getElementById('cfMonthly'), {type:'bar',data:{labels:cf.monthly.map(m=>m.ym.slice(2)),datasets:[{label:'수입',data:cf.monthly.map(m=>m.income),backgroundColor:'#10b981'},{label:'지출',data:cf.monthly.map(m=>m.expense),backgroundColor:'#f43f5e'}]},options:{maintainAspectRatio:false}});
+            charts.cfCat = new Chart(document.getElementById('cfCat'), {type:'doughnut',data:{labels:[],datasets:[{data:[],backgroundColor:['#f43f5e','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#06b6d4']}]},options:{maintainAspectRatio:false}});
+        }
+        // 초기화 시 전체(overall) 데이터 렌더링 호출
+        renderCategoryTables('overall');
     }
 
+    // 💡 버그 1, 2 해결: 차트(파이) 업데이트 로직 추가
     function renderCategoryTables(sm) {
         const container = document.getElementById('monthly-category-summary'); if (!container || !window.__cf) return;
         let iD, eD;
-        if (sm === 'overall') { iD = window.__cf.incomeCategories; eD = window.__cf.expenseCategories; }
-        else {
+        
+        if (sm === 'overall') { 
+            iD = window.__cf.incomeCategories; 
+            eD = window.__cf.expenseCategories; 
+        } else {
             iD = new Map(); eD = new Map();
-            (window.__transactions || []).filter(tx => parseMonthLike(tx.date) === sm).forEach(tx => { if(tx.type === '수입') iD.set(tx.category, (iD.get(tx.category)||0)+tx.amount); else eD.set(tx.category, (eD.get(tx.category)||0)+tx.amount); });
+            (window.__transactions || []).filter(tx => parseMonthLike(tx.date) === sm && !tx.isHidden).forEach(tx => { 
+                if(tx.type === '수입') iD.set(tx.category, (iD.get(tx.category)||0)+tx.amount); 
+                else eD.set(tx.category, (eD.get(tx.category)||0)+tx.amount); // 지출, 이체 등은 모두 지출 영역에 누적
+            });
         }
+        
+        const iDPairs = [...iD.entries()].sort((a,b)=>b[1]-a[1]);
+        const eDPairs = [...eD.entries()].sort((a,b)=>b[1]-a[1]);
+
         const createT = (title, pairs, color) => `<div class="card overflow-hidden"><div class="p-3 bg-slate-50 font-semibold">${title}</div><table class="w-full text-sm">${pairs.map(([c, a]) => `<tr class="border-t category-row cursor-pointer hover:bg-slate-50" data-category="${c}" data-type="${title.includes('수입')?'수입':'지출'}"><td class="p-3">${c}</td><td class="p-3 text-right ${color}">${fmtWon(a)}</td></tr>`).join('')}</table></div>`;
-        container.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">${createT('수입 요약', [...iD.entries()].sort((a,b)=>b[1]-a[1]), 'text-emerald-600')}${createT('지출 요약', [...eD.entries()].sort((a,b)=>b[1]-a[1]), 'text-rose-600')}</div>`;
+        container.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">${createT('수입 요약', iDPairs, 'text-emerald-600')}${createT('지출 요약', eDPairs, 'text-rose-600')}</div>`;
+
+        // 상위내역 그래프(파이 차트) 즉시 업데이트
+        if (window.Chart && charts.cfCat) {
+            const top8 = eDPairs.slice(0, 8);
+            charts.cfCat.data.labels = top8.map(c => c[0]);
+            charts.cfCat.data.datasets[0].data = top8.map(c => c[1]);
+            charts.cfCat.update();
+        }
     }
 
+    // 💡 버그 3 해결: 상세내역 표시 조건 완화
     function showTransactionModal(cat, type) {
         const ms = document.getElementById('month-selector'); const sm = ms ? ms.value : 'overall';
-        let filtered = (window.__transactions || []).filter(tx => tx.category === cat && tx.type === type && (sm === 'overall' || parseMonthLike(tx.date) === sm)).sort((a, b) => new Date(b.date) - new Date(a.date));
-        document.getElementById('modal-title').textContent = `'${cat}' ${type} (${filtered.length}건)`;
-        document.getElementById('modal-body').innerHTML = `<table class="w-full text-sm"><thead><tr class="bg-slate-50"><th class="p-2 text-left">날짜</th><th class="p-2 text-left">내용</th><th class="p-2 text-right">금액</th></tr></thead><tbody>${filtered.map(tx => `<tr class="border-t"><td class="p-2">${tx.date}</td><td class="p-2">${tx.content}</td><td class="p-2 text-right">${fmtWon(tx.amount)}</td></tr>`).join('')}</tbody></table>`;
+        
+        let filtered = (window.__transactions || []).filter(tx => {
+            if (tx.isHidden) return false; // 숨김 항목 철저히 제외
+            const monthMatch = (sm === 'overall' || parseMonthLike(tx.date) === sm);
+            const catMatch = (tx.category === cat);
+            // 뱅샐의 '이체' 타입이 지출 요약표에 뜨는 경우가 있으므로, 표가 '지출'이면 '수입'이 아닌 모든 것을 매칭
+            const typeMatch = (type === '수입') ? (tx.type === '수입') : (tx.type !== '수입');
+            return monthMatch && catMatch && typeMatch;
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        document.getElementById('modal-title').textContent = `'${cat}' 상세 내역 (${filtered.length}건)`;
+        
+        if (filtered.length === 0) {
+            document.getElementById('modal-body').innerHTML = '<p class="text-slate-500 py-4 text-center">해당 조건에 맞는 내역이 없습니다.</p>';
+        } else {
+            document.getElementById('modal-body').innerHTML = `<table class="w-full text-sm"><thead><tr class="bg-slate-50"><th class="p-2 text-left">날짜</th><th class="p-2 text-left">내용</th><th class="p-2 text-right">금액</th></tr></thead><tbody>${filtered.map(tx => `<tr class="border-t"><td class="p-2">${tx.date}</td><td class="p-2">${tx.content}</td><td class="p-2 text-right">${fmtWon(tx.amount)}</td></tr>`).join('')}</tbody></table>`;
+        }
         document.getElementById('transaction-modal').classList.remove('hidden');
     }
 
-    // 화면 갱신 최적화 (자산 체크박스 누를때마다 현금흐름 탭이 초기화되는 문제 방지)
     function renderAssetUpdatesOnly() {
         if (!window.__data) return;
         const sel = window.__data.assets.filter(it => window.__data.selectedAssetIds.has(it.id));
@@ -516,20 +582,33 @@
 
     // ===== 🚀 Sync & Load =====
     async function syncToGist() {
-        if (!GITHUB_TOKEN) { showMessage("설정 필요", "코드 상단에 GITHUB_TOKEN을 입력해주세요."); return; }
+        let localToken = localStorage.getItem('pingu_github_token') || GITHUB_TOKEN;
+        if (!localToken) {
+            localToken = prompt("보안 연결을 위해 발급받은 GitHub Personal Access Token (ghp_...)을 입력해주세요.\n※ 브라우저에만 안전하게 저장됩니다.");
+            if (!localToken) { showMessage("안내", "토큰 입력 취소."); return; }
+            localStorage.setItem('pingu_github_token', localToken.trim());
+        }
+
         const btn = document.getElementById('exportBtn');
         try {
             btn.disabled = true; btn.innerText = "동기화 중...";
             const payload = { data: { a: window.__data.assets, l: window.__data.liabilities, s: Array.from(window.__data.selectedAssetIds) }, cf: window.__cf ? { m: window.__cf.monthly, i: Array.from(window.__cf.incomeCategories), e: Array.from(window.__cf.expenseCategories) } : null, t: window.__transactions || [] };
             const method = GIST_ID ? 'PATCH' : 'POST';
             const url = GIST_ID ? `https://api.github.com/gists/${GIST_ID}` : 'https://api.github.com/gists';
-            const res = await fetch(url, { method, headers: { 'Authorization': `token ${GITHUB_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ description: "Pingu Data", public: false, files: { "pingu_data.json": { content: JSON.stringify(payload) } } }) });
-            if (!res.ok) throw new Error("Gist API 호출에 실패했습니다. 토큰 권한을 확인해주세요.");
+            
+            const res = await fetch(url, { method, headers: { 'Authorization': `token ${localToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ description: "Pingu Data", public: false, files: { "pingu_data.json": { content: JSON.stringify(payload) } } }) });
+            if (!res.ok) {
+                if (res.status === 401 || res.status === 403 || res.status === 404) {
+                    localStorage.removeItem('pingu_github_token'); GIST_ID = ""; localStorage.removeItem('pingu_gist_id');
+                    throw new Error("토큰이 만료되었거나 권한이 없습니다. 다시 시도하여 새로운 토큰을 입력해주세요.");
+                }
+                throw new Error("동기화 통신 오류");
+            }
             const d = await res.json();
-            if (!GIST_ID) { GIST_ID = d.id; localStorage.setItem('pingu_gist_id', GIST_ID); }
+            GIST_ID = d.id; localStorage.setItem('pingu_gist_id', GIST_ID); 
             const sUrl = new URL(window.location.href); sUrl.searchParams.set('gist', GIST_ID);
-            showMessage("동기화 완료", `<p class="mb-2 text-sm">클라우드 덮어쓰기 완료! 아래 링크를 복사하세요.</p><input id="sur" value="${sUrl}" class="w-full border p-2 text-xs font-mono mb-2 bg-slate-50" readonly><button onclick="document.getElementById('sur').select();document.execCommand('copy');this.innerText='복사완료!'" class="btn btn-primary w-full">링크 복사하기</button>`);
-        } catch (e) { showMessage("동기화 오류", e.message); } finally { btn.disabled = false; btn.innerText = "🚀 클라우드 동기화"; }
+            showMessage("동기화 완료", `<p class="mb-2 text-sm">데이터 덮어쓰기 완료! 아래 링크를 카카오톡 공지에 올리세요.</p><input id="sur" value="${sUrl}" class="w-full border p-2 text-xs font-mono mb-2 bg-slate-50" readonly><button onclick="document.getElementById('sur').select();document.execCommand('copy');this.innerText='복사완료!'" class="btn btn-primary w-full">링크 복사하기</button>`);
+        } catch (e) { showMessage("동기화 실패", `<p class="text-red-500">${e.message}</p>`); } finally { btn.disabled = false; btn.innerText = "🚀 클라우드 동기화"; }
     }
 
     async function loadFromGist(id) {
@@ -537,18 +616,19 @@
             document.getElementById('upload-ui').classList.add('hidden');
             document.getElementById('shared-loading-ui').classList.remove('hidden');
             const res = await fetch(`https://api.github.com/gists/${id}`);
-            if (!res.ok) throw new Error("데이터를 가져오는데 실패했습니다.");
+            if (!res.ok) throw new Error("데이터를 찾을 수 없습니다.");
             const gist = await res.json();
             const payload = JSON.parse(gist.files['pingu_data.json'].content);
             window.__isSharedUrlData = true;
             window.__data = { assets: payload.data.a, liabilities: payload.data.l, selectedAssetIds: new Set(payload.data.s) };
             if (payload.cf) window.__cf = { monthly: payload.cf.m, incomeCategories: new Map(payload.cf.i), expenseCategories: new Map(payload.cf.e) };
             window.__transactions = payload.t;
+            
             document.getElementById('upload-section').classList.add('hidden');
             document.getElementById('results-section').classList.remove('hidden');
             const eBtn = document.getElementById('exportBtn'); if(eBtn) eBtn.style.display = 'none';
             renderAll();
-        } catch (e) { alert("데이터 로드 오류: " + e.message); window.location.href = window.location.pathname; }
+        } catch (e) { alert("공유 데이터 오류.\n" + e.message); window.location.href = window.location.pathname; }
     }
 
     async function run() {
@@ -599,24 +679,22 @@
         document.getElementById('exportBtn').onclick = syncToGist;
         document.getElementById('resetBtn').onclick = () => window.location.href = window.location.pathname;
 
-        // ===== 🚀 핵심 버그 해결: 체크박스 및 월별 선택박스 이벤트 핸들러 추가 =====
+        // 💡 버그 해결: 이벤트 통합 위임 (Event Delegation)
         document.body.addEventListener('change', (e) => {
-            // 1. 자산 체크박스 끄고 켤 때
             if (e.target.classList.contains('asset-select')) {
                 const id = e.target.getAttribute('data-id');
                 if (window.__data) {
                     if (e.target.checked) window.__data.selectedAssetIds.add(id);
                     else window.__data.selectedAssetIds.delete(id);
-                    renderAssetUpdatesOnly(); // 전체 렌더링 대신 자산 부분만 다시 그림 (현금흐름 탭 초기화 방지)
+                    renderAssetUpdatesOnly(); 
                 }
             } 
-            // 2. 누락되었던 월별 선택 드롭다운(Month Selector) 값 변경 이벤트 복구!
+            // 월별 선택 드롭다운(Month Selector) 값 변경 이벤트 재연결 완료
             else if (e.target.id === 'month-selector') {
                 renderCategoryTables(e.target.value);
             }
         });
         
-        // 상세 내역 모달 열기 핸들러
         document.getElementById('results-section').addEventListener('click', (e) => {
             const row = e.target.closest('.category-row');
             if (row) showTransactionModal(row.dataset.category, row.dataset.type);
@@ -627,3 +705,5 @@
   </script>
 </body>
 </html>
+
+
