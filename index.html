@@ -7,6 +7,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- 파이 차트 위에 퍼센트를 직접 그려주는 플러그인 추가 -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <!-- LZString (데이터 압축용) -->
   <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -170,6 +173,11 @@
     const GITHUB_TOKEN = ""; // 👈 여기에 발급받은 ghp_... 토큰을 다시 입력해주세요.
     let GIST_ID = localStorage.getItem('pingu_gist_id') || "";
 
+    // 플러그인 등록
+    if (window.Chart && window.ChartDataLabels) {
+        Chart.register(ChartDataLabels);
+    }
+
     // 제외할 불필요한 카테고리/타입 목록
     const EXCLUDED_KEYWORDS = ['이체', '내계좌이체', '카드대금', '저축'];
 
@@ -312,7 +320,6 @@
         return foundName ? workbook.Sheets[foundName] : (workbook.SheetNames.length === 1 ? workbook.Sheets[workbook.SheetNames[0]] : null);
     }
 
-    // 🔥 뱅샐현황 시트에서 불필요한/숨김 항목 제외 처리
     function parseCashflowMatrix(rows, s, e) {
         let monthsInfo = null;
         for (let i = s; i < Math.min(e, s + 40); i++) {
@@ -334,7 +341,7 @@
         for (const [m, c] of monthCols.entries()) {
             const iAmt = parseNumber(incomeR[c]) || sumR(c, monthsInfo.headerIdx + 1, iCE);
             const eAmt = Math.abs(parseNumber(expenseR[c])) || sumR(c, eCS, eCE);
-            monthly.push({ ym: m, income: iAmt, expense: eAmt });
+            monthly.push({ ym: m, income: Math.abs(iAmt), expense: Math.abs(eAmt) });
         }
         
         const processCats = (si, ei) => {
@@ -343,7 +350,6 @@
                 let label = ""; if (rows[i]) for(let cell of rows[i]) if(cell != null && String(cell).trim()){ label = String(cell).trim(); break; }
                 if (!label || label.includes('총계')) continue;
                 
-                // 제외 대상 키워드 필터링
                 if (label.includes('숨김') || EXCLUDED_KEYWORDS.includes(label)) continue;
 
                 let tot = 0; for (const [, c] of monthCols.entries()) tot += Math.abs(parseNumber(rows[i][c]) || 0);
@@ -381,7 +387,6 @@
       return { monthly: window.map(ym=>({ ym, income:monthlyMap.get(ym).income, expense:monthlyMap.get(ym).expense })), incomeCategories: incomeCatMap, expenseCategories: expenseCatMap };
     }
     
-    // 🔥 가계부 내역 시트에서 숨김 항목 및 이체 항목 완벽 제외
     function parseTransactions(rows) {
         let hIdx = rows.findIndex(row => {
             if (!Array.isArray(row)) return false;
@@ -409,13 +414,11 @@
             const catStr = String(r[cIdx]||'').trim();
             const typeStr = tIdx !== -1 ? String(r[tIdx]||'').trim() : '미분류';
             
-            // 1. 숨김 텍스트가 포함된 경우 제외
             let isHidden = false;
             if (hiddenIdx !== -1 && String(r[hiddenIdx]||'').includes('숨김')) isHidden = true;
             if (contentStr.includes('(숨김)') || contentStr.includes('[숨김]')) isHidden = true;
             if (catStr.includes('(숨김)') || catStr.includes('[숨김]')) isHidden = true;
 
-            // 2. 이체, 내계좌이체, 카드대금 등의 키워드가 대분류나 타입에 있는 경우 제외
             if (EXCLUDED_KEYWORDS.includes(catStr) || EXCLUDED_KEYWORDS.includes(typeStr)) {
                 isHidden = true;
             }
@@ -454,9 +457,40 @@
         if(charts.barAsset) charts.barAsset.destroy();
         
         document.getElementById('charts').innerHTML = `<div class="card p-4 lg:col-span-1"><h3>자산 비중</h3><div class="h-64"><canvas id="pieTotal"></canvas></div></div><div class="card p-4 lg:col-span-2"><h3>항목별 자산</h3><div class="h-64"><canvas id="barAsset"></canvas></div></div>`;
-        charts.pie = new Chart(document.getElementById('pieTotal'), { type: 'doughnut', data: { labels: ['자산', '부채'], datasets: [{ data: [aSum, lSum], backgroundColor: ['#10b981', '#f43f5e'] }] }, options: { maintainAspectRatio: false } });
+        
+        charts.pie = new Chart(document.getElementById('pieTotal'), { 
+            type: 'doughnut', 
+            data: { labels: ['자산', '부채'], datasets: [{ data: [aSum, lSum], backgroundColor: ['#10b981', '#f43f5e'], borderWidth: 0 }] }, 
+            options: { 
+                maintainAspectRatio: false,
+                plugins: {
+                    // 파이 차트 위에 퍼센트 표시
+                    datalabels: {
+                        color: '#fff',
+                        font: { weight: 'bold', size: 12 },
+                        formatter: (value, ctx) => {
+                            const total = aSum + lSum;
+                            if (total === 0) return null;
+                            const pct = Math.round((value / total) * 100);
+                            return pct >= 5 ? pct + '%' : null; // 5% 미만은 라벨 생략 (가독성 목적)
+                        }
+                    }
+                }
+            } 
+        });
+
         const cats = computeCategoryTotals(assets);
-        charts.barAsset = new Chart(document.getElementById('barAsset'), { type: 'bar', data: { labels: cats.map(c => c[0]), datasets: [{ data: cats.map(c => c[1]), backgroundColor: '#38bdf8' }] }, options: { indexAxis: 'y', maintainAspectRatio: false } });
+        charts.barAsset = new Chart(document.getElementById('barAsset'), { 
+            type: 'bar', 
+            data: { labels: cats.map(c => c[0]), datasets: [{ data: cats.map(c => c[1]), backgroundColor: '#38bdf8', borderRadius: 4 }] }, 
+            options: { 
+                indexAxis: 'y', 
+                maintainAspectRatio: false,
+                plugins: {
+                    datalabels: { display: false } // 바 차트는 라벨 생략
+                }
+            } 
+        });
     }
 
     function renderGroupedTable(title, items) {
@@ -506,19 +540,35 @@
     
     function renderCashflowDetails(cf){
         const wrap = document.getElementById('cashflow'); if (!wrap) return;
-        wrap.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="card p-4"><h3>월별 흐름</h3><div class="h-72"><canvas id="cfMonthly"></canvas></div></div><div class="card p-4"><h3>상위 지출</h3><div class="h-72"><canvas id="cfCat"></canvas></div></div></div><div class="mt-6"><div class="flex justify-between items-center mb-4"><h3>상세 내역 (월 선택 시 차트 반영)</h3><select id="month-selector" class="border border-slate-300 rounded px-3 py-1 font-semibold text-slate-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500"><option value="overall">전체 기간</option>${cf.monthly.map(m => `<option value="${m.ym}">${m.ym}</option>`).join('')}</select></div><div id="monthly-category-summary"></div></div>`;
+        wrap.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="card p-4"><h3>월별 흐름</h3><div class="h-72"><canvas id="cfMonthly"></canvas></div></div><div class="card p-4"><h3>상위 지출 차트</h3><div class="h-72"><canvas id="cfCat"></canvas></div></div></div><div class="mt-6"><div class="flex justify-between items-center mb-4"><h3>상세 내역 (월 선택 시 차트 반영)</h3><select id="month-selector" class="border border-slate-300 rounded px-3 py-1 font-semibold text-slate-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500"><option value="overall">전체 기간</option>${cf.monthly.map(m => `<option value="${m.ym}">${m.ym}</option>`).join('')}</select></div><div id="monthly-category-summary"></div></div>`;
         
         if(charts.cfMonthly) charts.cfMonthly.destroy();
 
         if (window.Chart) {
-            charts.cfMonthly = new Chart(document.getElementById('cfMonthly'), {type:'bar',data:{labels:cf.monthly.map(m=>m.ym.slice(2)),datasets:[{label:'수입',data:cf.monthly.map(m=>m.income),backgroundColor:'#10b981'},{label:'지출',data:cf.monthly.map(m=>m.expense),backgroundColor:'#f43f5e'}]},options:{maintainAspectRatio:false}});
+            charts.cfMonthly = new Chart(document.getElementById('cfMonthly'), {
+                type:'bar',
+                data:{
+                    labels:cf.monthly.map(m=>m.ym.slice(2)),
+                    datasets:[
+                        {label:'수입',data:cf.monthly.map(m=>m.income),backgroundColor:'#10b981', borderRadius: 4},
+                        {label:'지출',data:cf.monthly.map(m=>m.expense),backgroundColor:'#f43f5e', borderRadius: 4}
+                    ]
+                },
+                options:{
+                    maintainAspectRatio:false,
+                    plugins: { 
+                        tooltip: { callbacks: { label: function(ctx) { return `${ctx.dataset.label}: ${fmtWon(ctx.parsed.y)}`; } } },
+                        datalabels: { display: false } // 바 차트는 라벨 생략
+                    },
+                    scales: { y: { ticks: { callback: function(val) { return (val/10000).toLocaleString() + '만'; } } } }
+                }
+            });
         }
         
-        // 초기화 시 전체(overall) 데이터 렌더링 (이 안에서 파이 차트도 생성/업데이트됨)
         renderCategoryTables('overall');
     }
 
-    // 🔥 월별 선택 시 상위 지출 차트(파이차트) 실시간 갱신 처리
+    // 🔥 수입/지출 표 하단에 총합 추가 + 파이 차트에 퍼센트 표시 기능 추가
     function renderCategoryTables(sm) {
         const container = document.getElementById('monthly-category-summary'); if (!container || !window.__cf) return;
         let iD, eD;
@@ -529,37 +579,103 @@
         } else {
             iD = new Map(); eD = new Map();
             (window.__transactions || []).filter(tx => parseMonthLike(tx.date) === sm && !tx.isHidden).forEach(tx => { 
-                if(tx.type === '수입') iD.set(tx.category, (iD.get(tx.category)||0)+tx.amount); 
-                else eD.set(tx.category, (eD.get(tx.category)||0)+tx.amount); 
+                const amt = Math.abs(tx.amount || 0); 
+                if(tx.type === '수입') iD.set(tx.category, (iD.get(tx.category)||0) + amt); 
+                else eD.set(tx.category, (eD.get(tx.category)||0) + amt); 
             });
         }
         
-        // 내림차순 정렬
         const iDPairs = [...iD.entries()].sort((a,b)=>b[1]-a[1]);
         const eDPairs = [...eD.entries()].sort((a,b)=>b[1]-a[1]);
 
-        const createT = (title, pairs, color) => `<div class="card overflow-hidden"><div class="p-3 bg-slate-50 font-semibold">${title}</div><table class="w-full text-sm">${pairs.map(([c, a]) => `<tr class="border-t category-row cursor-pointer hover:bg-slate-50 transition-colors" data-category="${c}" data-type="${title.includes('수입')?'수입':'지출'}"><td class="p-3">${c}</td><td class="p-3 text-right font-medium ${color}">${fmtWon(a)}</td></tr>`).join('')}</table></div>`;
+        // 표를 그릴 때 하단에 총합(tfoot) 추가
+        const createT = (title, pairs, color) => {
+            const totalSum = pairs.reduce((sum, item) => sum + item[1], 0);
+            return `
+            <div class="card overflow-hidden">
+                <div class="p-3 bg-slate-50 font-semibold">${title}</div>
+                <table class="w-full text-sm">
+                    <tbody>
+                    ${pairs.map(([c, a]) => `<tr class="border-t category-row cursor-pointer hover:bg-slate-50 transition-colors" data-category="${c}" data-type="${title.includes('수입')?'수입':'지출'}"><td class="p-3">${c}</td><td class="p-3 text-right font-medium ${color}">${fmtWon(a)}</td></tr>`).join('')}
+                    </tbody>
+                    <tfoot class="bg-slate-100 border-t-2 border-slate-200 font-bold">
+                        <tr>
+                            <td class="p-3">총합</td>
+                            <td class="p-3 text-right ${color}">${fmtWon(totalSum)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>`;
+        }
+
         container.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">${createT('수입 요약', iDPairs, 'text-emerald-600')}${createT('지출 요약', eDPairs, 'text-rose-600')}</div>`;
 
-        // 월별 선택 시 파이차트 완벽 갱신 (지워버리고 새로 그리기)
+        // 파이 차트 생성 로직
         if (window.Chart) {
             const canvasEl = document.getElementById('cfCat');
             if (canvasEl) {
                 if(charts.cfCat) charts.cfCat.destroy();
-                const top8 = eDPairs.slice(0, 8);
+                
+                let pieLabels = [];
+                let pieData = [];
+                
+                if (eDPairs.length > 7) {
+                    const top7 = eDPairs.slice(0, 7);
+                    const othersSum = eDPairs.slice(7).reduce((sum, item) => sum + item[1], 0);
+                    pieLabels = top7.map(c => c[0]).concat(['기타']);
+                    pieData = top7.map(c => c[1]).concat([othersSum]);
+                } else {
+                    pieLabels = eDPairs.map(c => c[0]);
+                    pieData = eDPairs.map(c => c[1]);
+                }
+
                 charts.cfCat = new Chart(canvasEl, {
                     type: 'doughnut',
                     data: {
-                        labels: top8.map(c=>c[0]),
-                        datasets: [{ data: top8.map(c=>c[1]), backgroundColor: ['#f43f5e','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#06b6d4'], borderWidth: 0 }]
+                        labels: pieLabels,
+                        datasets: [{ 
+                            data: pieData, 
+                            backgroundColor: ['#f43f5e','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#94a3b8'], 
+                            borderWidth: 2,
+                            borderColor: '#ffffff'
+                        }]
                     },
                     options: {
                         maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right', 
+                                labels: { boxWidth: 12, padding: 10, font: { size: 11, family: "'Inter', 'Noto Sans KR', sans-serif" } }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(ctx) {
+                                        const total = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                        const val = ctx.parsed;
+                                        const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                                        return ` ${ctx.label}: ${fmtWon(val)} (${pct}%)`;
+                                    }
+                                }
+                            },
+                            // 파이 차트 위에 퍼센트 직관적 표시
+                            datalabels: {
+                                color: '#fff',
+                                font: { weight: 'bold', size: 11 },
+                                formatter: (value, ctx) => {
+                                    const total = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                    if(total === 0) return null;
+                                    const pct = Math.round((value / total) * 100);
+                                    return pct >= 5 ? pct + '%' : null; // 너무 작은 조각(5% 미만)은 글씨를 숨김
+                                }
+                            }
+                        },
                         onClick: (e, elements) => {
                             if (elements.length > 0) {
                                 const chart = elements[0].element.$context.chart;
                                 const cat = chart.data.labels[elements[0].index];
-                                showTransactionModal(cat, '지출');
+                                if (cat !== '기타') { 
+                                    showTransactionModal(cat, '지출');
+                                }
                             }
                         }
                     }
@@ -568,7 +684,6 @@
         }
     }
 
-    // 🔥 금액이 큰 순서대로 내림차순 정렬 적용
     function showTransactionModal(cat, type) {
         const ms = document.getElementById('month-selector'); const sm = ms ? ms.value : 'overall';
         
@@ -576,16 +691,16 @@
             if (tx.isHidden) return false;
             const monthMatch = (sm === 'overall' || parseMonthLike(tx.date) === sm);
             const catMatch = (tx.category === cat);
-            const typeMatch = (type === '수입') ? (tx.type === '수입') : (tx.type !== '수입'); // 수입이 아니면 모두 지출로 취급
+            const typeMatch = (type === '수입') ? (tx.type === '수입') : (tx.type !== '수입'); 
             return monthMatch && catMatch && typeMatch;
-        }).sort((a, b) => b.amount - a.amount); // 금액 순 정렬 적용
+        }).sort((a, b) => Math.abs(b.amount || 0) - Math.abs(a.amount || 0)); 
         
         document.getElementById('modal-title').textContent = `'${cat}' 상세 내역 (${filtered.length}건)`;
         
         if (filtered.length === 0) {
             document.getElementById('modal-body').innerHTML = '<p class="text-slate-500 py-6 text-center">해당 조건에 맞는 내역이 없습니다.</p>';
         } else {
-            document.getElementById('modal-body').innerHTML = `<table class="w-full text-sm"><thead><tr class="bg-slate-100 text-slate-600"><th class="p-3 text-left">날짜</th><th class="p-3 text-left">내용</th><th class="p-3 text-right">금액</th></tr></thead><tbody>${filtered.map(tx => `<tr class="border-t border-slate-200 hover:bg-slate-50"><td class="p-3 whitespace-nowrap text-slate-500">${tx.date}</td><td class="p-3 font-medium">${tx.content}</td><td class="p-3 text-right font-bold">${fmtWon(tx.amount)}</td></tr>`).join('')}</tbody></table>`;
+            document.getElementById('modal-body').innerHTML = `<table class="w-full text-sm"><thead><tr class="bg-slate-100 text-slate-600"><th class="p-3 text-left">날짜</th><th class="p-3 text-left">내용</th><th class="p-3 text-right">금액</th></tr></thead><tbody>${filtered.map(tx => `<tr class="border-t border-slate-200 hover:bg-slate-50"><td class="p-3 whitespace-nowrap text-slate-500">${tx.date}</td><td class="p-3 font-medium">${tx.content}</td><td class="p-3 text-right font-bold text-slate-700">${fmtWon(Math.abs(tx.amount))}</td></tr>`).join('')}</tbody></table>`;
         }
         document.getElementById('transaction-modal').classList.remove('hidden');
     }
