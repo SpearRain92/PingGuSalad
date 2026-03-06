@@ -7,7 +7,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- LZString (데이터 압축용) -->
   <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -96,7 +95,6 @@
   </header>
 
   <main class="max-w-7xl mx-auto p-4 sm:p-8">
-    <!-- Step 1: Upload -->
     <div id="upload-section" class="card p-6">
       <div id="upload-ui">
           <div class="flex items-center gap-3 mb-6">
@@ -122,7 +120,6 @@
       </div>
     </div>
 
-    <!-- Step 2: Results -->
     <div id="results-section" class="mt-8 hidden">
        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
         <h2 class="text-lg font-bold">분석 결과 대시보드</h2>
@@ -152,9 +149,9 @@
 
   <div id="transaction-modal" class="modal-overlay hidden">
       <div class="modal-content">
-          <div class="p-4 border-b flex justify-between items-center">
-              <h3 id="modal-title" class="font-bold text-slate-800"></h3>
-              <button id="close-modal-btn" class="text-slate-400 hover:text-slate-600">✕</button>
+          <div class="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-xl">
+              <h3 id="modal-title" class="font-bold text-slate-800 text-lg"></h3>
+              <button id="close-modal-btn" class="text-slate-400 hover:text-slate-600 text-2xl font-bold px-2">✕</button>
           </div>
           <div id="modal-body" class="p-4 overflow-y-auto"></div>
       </div>
@@ -172,6 +169,9 @@
     // ===== 🔥 중요: GitHub Gist 연동 설정 🔥 =====
     const GITHUB_TOKEN = ""; // 👈 여기에 발급받은 ghp_... 토큰을 다시 입력해주세요.
     let GIST_ID = localStorage.getItem('pingu_gist_id') || "";
+
+    // 제외할 불필요한 카테고리/타입 목록
+    const EXCLUDED_KEYWORDS = ['이체', '내계좌이체', '카드대금', '저축'];
 
     // ===== UI Setup Functions =====
     function setupUI() {
@@ -312,6 +312,7 @@
         return foundName ? workbook.Sheets[foundName] : (workbook.SheetNames.length === 1 ? workbook.Sheets[workbook.SheetNames[0]] : null);
     }
 
+    // 🔥 뱅샐현황 시트에서 불필요한/숨김 항목 제외 처리
     function parseCashflowMatrix(rows, s, e) {
         let monthsInfo = null;
         for (let i = s; i < Math.min(e, s + 40); i++) {
@@ -335,11 +336,16 @@
             const eAmt = Math.abs(parseNumber(expenseR[c])) || sumR(c, eCS, eCE);
             monthly.push({ ym: m, income: iAmt, expense: eAmt });
         }
+        
         const processCats = (si, ei) => {
             const map = new Map();
             for (let i = si; i < ei; i++) {
                 let label = ""; if (rows[i]) for(let cell of rows[i]) if(cell != null && String(cell).trim()){ label = String(cell).trim(); break; }
                 if (!label || label.includes('총계')) continue;
+                
+                // 제외 대상 키워드 필터링
+                if (label.includes('숨김') || EXCLUDED_KEYWORDS.includes(label)) continue;
+
                 let tot = 0; for (const [, c] of monthCols.entries()) tot += Math.abs(parseNumber(rows[i][c]) || 0);
                 if (tot >= MIN_AMOUNT) map.set(label, (map.get(label) || 0) + Math.round(tot));
             }
@@ -375,7 +381,7 @@
       return { monthly: window.map(ym=>({ ym, income:monthlyMap.get(ym).income, expense:monthlyMap.get(ym).expense })), incomeCategories: incomeCatMap, expenseCategories: expenseCatMap };
     }
     
-    // 💡 버그 3 해결: 숨김내역 완벽 차단 및 타입 유연화
+    // 🔥 가계부 내역 시트에서 숨김 항목 및 이체 항목 완벽 제외
     function parseTransactions(rows) {
         let hIdx = rows.findIndex(row => {
             if (!Array.isArray(row)) return false;
@@ -390,7 +396,6 @@
         if (tIdx === -1) tIdx = h.indexOf('수입/지출');
         if (tIdx === -1) tIdx = h.findIndex(c => c.includes('분류') && c !== '대분류' && c !== '소분류');
         
-        // 숨김 관련 열 찾기
         let hiddenIdx = h.findIndex(c => c.includes('숨김'));
         if (hiddenIdx === -1) hiddenIdx = h.findIndex(c => c === '상태');
 
@@ -402,12 +407,18 @@
             
             const contentStr = String(r[coIdx]||'').trim();
             const catStr = String(r[cIdx]||'').trim();
+            const typeStr = tIdx !== -1 ? String(r[tIdx]||'').trim() : '미분류';
             
-            // 🔥 숨김 항목 제외 로직
+            // 1. 숨김 텍스트가 포함된 경우 제외
             let isHidden = false;
             if (hiddenIdx !== -1 && String(r[hiddenIdx]||'').includes('숨김')) isHidden = true;
             if (contentStr.includes('(숨김)') || contentStr.includes('[숨김]')) isHidden = true;
             if (catStr.includes('(숨김)') || catStr.includes('[숨김]')) isHidden = true;
+
+            // 2. 이체, 내계좌이체, 카드대금 등의 키워드가 대분류나 타입에 있는 경우 제외
+            if (EXCLUDED_KEYWORDS.includes(catStr) || EXCLUDED_KEYWORDS.includes(typeStr)) {
+                isHidden = true;
+            }
 
             const amt = parseNumber(r[aIdx]); if (amt == null) continue;
             let date = String(r[dIdx] || '');
@@ -420,7 +431,7 @@
                     category: catStr || '미분류', 
                     content: contentStr, 
                     amount: amt, 
-                    type: tIdx !== -1 ? String(r[tIdx]||'').trim() : '미분류',
+                    type: typeStr,
                     isHidden: isHidden
                 });
             }
@@ -495,20 +506,19 @@
     
     function renderCashflowDetails(cf){
         const wrap = document.getElementById('cashflow'); if (!wrap) return;
-        wrap.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="card p-4"><h3>월별 흐름</h3><div class="h-72"><canvas id="cfMonthly"></canvas></div></div><div class="card p-4"><h3>상위 지출</h3><div class="h-72"><canvas id="cfCat"></canvas></div></div></div><div class="mt-6"><div class="flex justify-between items-center mb-4"><h3>상세 내역</h3><select id="month-selector" class="border rounded px-2 py-1"><option value="overall">전체 기간</option>${cf.monthly.map(m => `<option value="${m.ym}">${m.ym}</option>`).join('')}</select></div><div id="monthly-category-summary"></div></div>`;
+        wrap.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="card p-4"><h3>월별 흐름</h3><div class="h-72"><canvas id="cfMonthly"></canvas></div></div><div class="card p-4"><h3>상위 지출</h3><div class="h-72"><canvas id="cfCat"></canvas></div></div></div><div class="mt-6"><div class="flex justify-between items-center mb-4"><h3>상세 내역 (월 선택 시 차트 반영)</h3><select id="month-selector" class="border border-slate-300 rounded px-3 py-1 font-semibold text-slate-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500"><option value="overall">전체 기간</option>${cf.monthly.map(m => `<option value="${m.ym}">${m.ym}</option>`).join('')}</select></div><div id="monthly-category-summary"></div></div>`;
         
         if(charts.cfMonthly) charts.cfMonthly.destroy();
-        if(charts.cfCat) charts.cfCat.destroy();
 
         if (window.Chart) {
             charts.cfMonthly = new Chart(document.getElementById('cfMonthly'), {type:'bar',data:{labels:cf.monthly.map(m=>m.ym.slice(2)),datasets:[{label:'수입',data:cf.monthly.map(m=>m.income),backgroundColor:'#10b981'},{label:'지출',data:cf.monthly.map(m=>m.expense),backgroundColor:'#f43f5e'}]},options:{maintainAspectRatio:false}});
-            charts.cfCat = new Chart(document.getElementById('cfCat'), {type:'doughnut',data:{labels:[],datasets:[{data:[],backgroundColor:['#f43f5e','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#06b6d4']}]},options:{maintainAspectRatio:false}});
         }
-        // 초기화 시 전체(overall) 데이터 렌더링 호출
+        
+        // 초기화 시 전체(overall) 데이터 렌더링 (이 안에서 파이 차트도 생성/업데이트됨)
         renderCategoryTables('overall');
     }
 
-    // 💡 버그 1, 2 해결: 차트(파이) 업데이트 로직 추가
+    // 🔥 월별 선택 시 상위 지출 차트(파이차트) 실시간 갱신 처리
     function renderCategoryTables(sm) {
         const container = document.getElementById('monthly-category-summary'); if (!container || !window.__cf) return;
         let iD, eD;
@@ -520,44 +530,62 @@
             iD = new Map(); eD = new Map();
             (window.__transactions || []).filter(tx => parseMonthLike(tx.date) === sm && !tx.isHidden).forEach(tx => { 
                 if(tx.type === '수입') iD.set(tx.category, (iD.get(tx.category)||0)+tx.amount); 
-                else eD.set(tx.category, (eD.get(tx.category)||0)+tx.amount); // 지출, 이체 등은 모두 지출 영역에 누적
+                else eD.set(tx.category, (eD.get(tx.category)||0)+tx.amount); 
             });
         }
         
+        // 내림차순 정렬
         const iDPairs = [...iD.entries()].sort((a,b)=>b[1]-a[1]);
         const eDPairs = [...eD.entries()].sort((a,b)=>b[1]-a[1]);
 
-        const createT = (title, pairs, color) => `<div class="card overflow-hidden"><div class="p-3 bg-slate-50 font-semibold">${title}</div><table class="w-full text-sm">${pairs.map(([c, a]) => `<tr class="border-t category-row cursor-pointer hover:bg-slate-50" data-category="${c}" data-type="${title.includes('수입')?'수입':'지출'}"><td class="p-3">${c}</td><td class="p-3 text-right ${color}">${fmtWon(a)}</td></tr>`).join('')}</table></div>`;
+        const createT = (title, pairs, color) => `<div class="card overflow-hidden"><div class="p-3 bg-slate-50 font-semibold">${title}</div><table class="w-full text-sm">${pairs.map(([c, a]) => `<tr class="border-t category-row cursor-pointer hover:bg-slate-50 transition-colors" data-category="${c}" data-type="${title.includes('수입')?'수입':'지출'}"><td class="p-3">${c}</td><td class="p-3 text-right font-medium ${color}">${fmtWon(a)}</td></tr>`).join('')}</table></div>`;
         container.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">${createT('수입 요약', iDPairs, 'text-emerald-600')}${createT('지출 요약', eDPairs, 'text-rose-600')}</div>`;
 
-        // 상위내역 그래프(파이 차트) 즉시 업데이트
-        if (window.Chart && charts.cfCat) {
-            const top8 = eDPairs.slice(0, 8);
-            charts.cfCat.data.labels = top8.map(c => c[0]);
-            charts.cfCat.data.datasets[0].data = top8.map(c => c[1]);
-            charts.cfCat.update();
+        // 월별 선택 시 파이차트 완벽 갱신 (지워버리고 새로 그리기)
+        if (window.Chart) {
+            const canvasEl = document.getElementById('cfCat');
+            if (canvasEl) {
+                if(charts.cfCat) charts.cfCat.destroy();
+                const top8 = eDPairs.slice(0, 8);
+                charts.cfCat = new Chart(canvasEl, {
+                    type: 'doughnut',
+                    data: {
+                        labels: top8.map(c=>c[0]),
+                        datasets: [{ data: top8.map(c=>c[1]), backgroundColor: ['#f43f5e','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#06b6d4'], borderWidth: 0 }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        onClick: (e, elements) => {
+                            if (elements.length > 0) {
+                                const chart = elements[0].element.$context.chart;
+                                const cat = chart.data.labels[elements[0].index];
+                                showTransactionModal(cat, '지출');
+                            }
+                        }
+                    }
+                });
+            }
         }
     }
 
-    // 💡 버그 3 해결: 상세내역 표시 조건 완화
+    // 🔥 금액이 큰 순서대로 내림차순 정렬 적용
     function showTransactionModal(cat, type) {
         const ms = document.getElementById('month-selector'); const sm = ms ? ms.value : 'overall';
         
         let filtered = (window.__transactions || []).filter(tx => {
-            if (tx.isHidden) return false; // 숨김 항목 철저히 제외
+            if (tx.isHidden) return false;
             const monthMatch = (sm === 'overall' || parseMonthLike(tx.date) === sm);
             const catMatch = (tx.category === cat);
-            // 뱅샐의 '이체' 타입이 지출 요약표에 뜨는 경우가 있으므로, 표가 '지출'이면 '수입'이 아닌 모든 것을 매칭
-            const typeMatch = (type === '수입') ? (tx.type === '수입') : (tx.type !== '수입');
+            const typeMatch = (type === '수입') ? (tx.type === '수입') : (tx.type !== '수입'); // 수입이 아니면 모두 지출로 취급
             return monthMatch && catMatch && typeMatch;
-        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+        }).sort((a, b) => b.amount - a.amount); // 금액 순 정렬 적용
         
         document.getElementById('modal-title').textContent = `'${cat}' 상세 내역 (${filtered.length}건)`;
         
         if (filtered.length === 0) {
-            document.getElementById('modal-body').innerHTML = '<p class="text-slate-500 py-4 text-center">해당 조건에 맞는 내역이 없습니다.</p>';
+            document.getElementById('modal-body').innerHTML = '<p class="text-slate-500 py-6 text-center">해당 조건에 맞는 내역이 없습니다.</p>';
         } else {
-            document.getElementById('modal-body').innerHTML = `<table class="w-full text-sm"><thead><tr class="bg-slate-50"><th class="p-2 text-left">날짜</th><th class="p-2 text-left">내용</th><th class="p-2 text-right">금액</th></tr></thead><tbody>${filtered.map(tx => `<tr class="border-t"><td class="p-2">${tx.date}</td><td class="p-2">${tx.content}</td><td class="p-2 text-right">${fmtWon(tx.amount)}</td></tr>`).join('')}</tbody></table>`;
+            document.getElementById('modal-body').innerHTML = `<table class="w-full text-sm"><thead><tr class="bg-slate-100 text-slate-600"><th class="p-3 text-left">날짜</th><th class="p-3 text-left">내용</th><th class="p-3 text-right">금액</th></tr></thead><tbody>${filtered.map(tx => `<tr class="border-t border-slate-200 hover:bg-slate-50"><td class="p-3 whitespace-nowrap text-slate-500">${tx.date}</td><td class="p-3 font-medium">${tx.content}</td><td class="p-3 text-right font-bold">${fmtWon(tx.amount)}</td></tr>`).join('')}</tbody></table>`;
         }
         document.getElementById('transaction-modal').classList.remove('hidden');
     }
@@ -607,8 +635,8 @@
             const d = await res.json();
             GIST_ID = d.id; localStorage.setItem('pingu_gist_id', GIST_ID); 
             const sUrl = new URL(window.location.href); sUrl.searchParams.set('gist', GIST_ID);
-            showMessage("동기화 완료", `<p class="mb-2 text-sm">데이터 덮어쓰기 완료! 아래 링크를 카카오톡 공지에 올리세요.</p><input id="sur" value="${sUrl}" class="w-full border p-2 text-xs font-mono mb-2 bg-slate-50" readonly><button onclick="document.getElementById('sur').select();document.execCommand('copy');this.innerText='복사완료!'" class="btn btn-primary w-full">링크 복사하기</button>`);
-        } catch (e) { showMessage("동기화 실패", `<p class="text-red-500">${e.message}</p>`); } finally { btn.disabled = false; btn.innerText = "🚀 클라우드 동기화"; }
+            showMessage("동기화 완료", `<p class="mb-2 text-sm">데이터 덮어쓰기 완료! 아래 링크를 카카오톡 공지에 올리세요.</p><input id="sur" value="${sUrl}" class="w-full border p-3 rounded text-xs font-mono mb-3 bg-slate-50 text-sky-800" readonly><button onclick="document.getElementById('sur').select();document.execCommand('copy');this.innerText='복사완료!'" class="btn btn-primary w-full p-3">링크 복사하기</button>`);
+        } catch (e) { showMessage("동기화 실패", `<p class="text-red-500">${e.message}</p>`); } finally { btn.disabled = false; btn.innerHTML = "🚀 클라우드 동기화"; }
     }
 
     async function loadFromGist(id) {
@@ -679,7 +707,6 @@
         document.getElementById('exportBtn').onclick = syncToGist;
         document.getElementById('resetBtn').onclick = () => window.location.href = window.location.pathname;
 
-        // 💡 버그 해결: 이벤트 통합 위임 (Event Delegation)
         document.body.addEventListener('change', (e) => {
             if (e.target.classList.contains('asset-select')) {
                 const id = e.target.getAttribute('data-id');
@@ -689,7 +716,6 @@
                     renderAssetUpdatesOnly(); 
                 }
             } 
-            // 월별 선택 드롭다운(Month Selector) 값 변경 이벤트 재연결 완료
             else if (e.target.id === 'month-selector') {
                 renderCategoryTables(e.target.value);
             }
