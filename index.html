@@ -7,9 +7,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- 파이 차트 위에 퍼센트를 직접 그려주는 플러그인 추가 -->
+  <!-- 파이 차트 퍼센트 표시 플러그인 -->
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-  <!-- LZString (데이터 압축용) -->
   <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -135,14 +134,22 @@
       <div id="cashflow-summary" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"></div>
       <div id="charts" class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6"></div>
       
-      <div class="card">
+      <div class="card mt-6">
         <div class="border-b border-slate-200 p-2 flex gap-2" id="tab-buttons">
             <button class="tab-btn active" data-tab="details">자산/부채 상세</button>
             <button class="tab-btn" data-tab="cashflow">현금흐름 분석</button>
             <button class="tab-btn" data-tab="logs">진단 로그</button>
         </div>
         <div class="p-6">
-            <div id="tab-details" class="tab-content active"><div id="result"></div></div>
+            <div id="tab-details" class="tab-content active">
+                <div class="flex justify-end mb-4">
+                    <!-- 🔥 onchange 이벤트를 직접 요소에 바인딩하여 100% 작동 보장 -->
+                    <select id="file-selector" onchange="renderAssetUpdatesOnly()" class="hidden border border-slate-300 rounded px-3 py-1 font-semibold text-slate-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        <option value="all">전체 합산</option>
+                    </select>
+                </div>
+                <div id="result-tables"></div>
+            </div>
             <div id="tab-cashflow" class="tab-content"><div id="cashflow"></div></div>
             <div id="tab-logs" class="tab-content"><pre id="tests" class="text-xs bg-slate-50 p-3 rounded h-64 overflow-auto"></pre></div>
         </div>
@@ -173,12 +180,7 @@
     const GITHUB_TOKEN = ""; // 👈 여기에 발급받은 ghp_... 토큰을 다시 입력해주세요.
     let GIST_ID = localStorage.getItem('pingu_gist_id') || "";
 
-    // 플러그인 등록
-    if (window.Chart && window.ChartDataLabels) {
-        Chart.register(ChartDataLabels);
-    }
-
-    // 제외할 불필요한 카테고리/타입 목록
+    if (window.Chart && window.ChartDataLabels) Chart.register(ChartDataLabels);
     const EXCLUDED_KEYWORDS = ['이체', '내계좌이체', '카드대금', '저축'];
 
     // ===== UI Setup Functions =====
@@ -212,18 +214,11 @@
                 }
                 if (!target || target === document) return;
 
-                const btns = tabButtons.querySelectorAll('.tab-btn');
-                for (let j = 0; j < btns.length; j++) {
-                    btns[j].classList.remove('active');
-                }
+                tabButtons.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
                 target.classList.add('active');
                 
-                for (let j = 0; j < tabContents.length; j++) {
-                    tabContents[j].classList.remove('active');
-                }
-                
-                const contentId = 'tab-' + target.getAttribute('data-tab');
-                const contentEl = document.getElementById(contentId);
+                tabContents.forEach(content => content.classList.remove('active'));
+                const contentEl = document.getElementById('tab-' + target.getAttribute('data-tab'));
                 if (contentEl) contentEl.classList.add('active');
             });
         }
@@ -297,7 +292,7 @@
         return { start: (header !== -1 ? header + 1 : start + 1), end };
     }
 
-    function parseFinancialStatus(rows) {
+    function parseFinancialStatus(rows, fileName) {
         const assets = [], liabilities = [];
         const range = findSectionRange(rows);
         let curACat = '', curLCat = '';
@@ -305,10 +300,11 @@
             const r = rows[i] || [];
             const aCat = String(r[0] || '').trim(), aProd = String(r[1] || '').trim(), aAmt = parseNumber(r[3]);
             if (aCat && !['자산', '부채', '항목'].includes(aCat)) curACat = aCat;
-            if (aProd && aAmt >= MIN_AMOUNT) assets.push({ 항목명: curACat || '기타', 상품명: aProd, 금액: aAmt });
+            if (aProd && aAmt >= MIN_AMOUNT) assets.push({ 항목명: curACat || '기타', 상품명: aProd, 금액: aAmt, fileName: fileName });
+            
             const lCat = String(r[4] || '').trim(), lProd = String(r[5] || '').trim(), lAmt = parseNumber(r[7]);
             if (lCat && !['자산', '부채', '항목'].includes(lCat)) curLCat = lCat;
-            if (lProd && lAmt >= MIN_AMOUNT) liabilities.push({ 항목명: curLCat || '기타', 상품명: lProd, 금액: lAmt });
+            if (lProd && lAmt >= MIN_AMOUNT) liabilities.push({ 항목명: curLCat || '기타', 상품명: lProd, 금액: lAmt, fileName: fileName });
         }
         return { assets, liabilities };
     }
@@ -349,9 +345,7 @@
             for (let i = si; i < ei; i++) {
                 let label = ""; if (rows[i]) for(let cell of rows[i]) if(cell != null && String(cell).trim()){ label = String(cell).trim(); break; }
                 if (!label || label.includes('총계')) continue;
-                
-                if (label.includes('숨김') || EXCLUDED_KEYWORDS.includes(label)) continue;
-
+                if (label.includes('숨김') || EXCLUDED_KEYWORDS.some(k => label.includes(k))) continue;
                 let tot = 0; for (const [, c] of monthCols.entries()) tot += Math.abs(parseNumber(rows[i][c]) || 0);
                 if (tot >= MIN_AMOUNT) map.set(label, (map.get(label) || 0) + Math.round(tot));
             }
@@ -419,9 +413,7 @@
             if (contentStr.includes('(숨김)') || contentStr.includes('[숨김]')) isHidden = true;
             if (catStr.includes('(숨김)') || catStr.includes('[숨김]')) isHidden = true;
 
-            if (EXCLUDED_KEYWORDS.includes(catStr) || EXCLUDED_KEYWORDS.includes(typeStr)) {
-                isHidden = true;
-            }
+            if (EXCLUDED_KEYWORDS.some(k => catStr.includes(k) || typeStr.includes(k))) isHidden = true;
 
             const amt = parseNumber(r[aIdx]); if (amt == null) continue;
             let date = String(r[dIdx] || '');
@@ -429,14 +421,7 @@
             else if (r[dIdx] instanceof Date) date = r[dIdx].toISOString().split('T')[0];
             
             if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                txs.push({ 
-                    date, 
-                    category: catStr || '미분류', 
-                    content: contentStr, 
-                    amount: amt, 
-                    type: typeStr,
-                    isHidden: isHidden
-                });
+                txs.push({ date, category: catStr || '미분류', content: contentStr, amount: amt, type: typeStr, isHidden: isHidden });
             }
         }
         return txs;
@@ -446,7 +431,7 @@
     function renderSummary(assets, liabilities, isShared) {
         const aSum = assets.reduce((s, r) => s + r.금액, 0), lSum = liabilities.reduce((s, r) => s + r.금액, 0);
         const card = (l, v, c) => `<div class="card p-5"><p class="text-sm text-slate-500 mb-1">${l}</p><p class="text-2xl font-bold ${c}">${fmtWon(v)}</p></div>`;
-        document.getElementById('summary').innerHTML = [card(isShared ? '선택 자산' : '총 자산', aSum, 'text-emerald-600'), card('총 부채', lSum, 'text-rose-600'), card('순자산', aSum - lSum, 'text-sky-600')].join('');
+        document.getElementById('summary').innerHTML = [card('자산 합계', aSum, 'text-emerald-600'), card('총 부채', lSum, 'text-rose-600'), card('순자산', aSum - lSum, 'text-sky-600')].join('');
     }
 
     function renderCharts(assets, liabilities) {
@@ -464,7 +449,6 @@
             options: { 
                 maintainAspectRatio: false,
                 plugins: {
-                    // 파이 차트 위에 퍼센트 표시
                     datalabels: {
                         color: '#fff',
                         font: { weight: 'bold', size: 12 },
@@ -472,7 +456,7 @@
                             const total = aSum + lSum;
                             if (total === 0) return null;
                             const pct = Math.round((value / total) * 100);
-                            return pct >= 5 ? pct + '%' : null; // 5% 미만은 라벨 생략 (가독성 목적)
+                            return pct >= 5 ? pct + '%' : null; 
                         }
                     }
                 }
@@ -486,9 +470,7 @@
             options: { 
                 indexAxis: 'y', 
                 maintainAspectRatio: false,
-                plugins: {
-                    datalabels: { display: false } // 바 차트는 라벨 생략
-                }
+                plugins: { datalabels: { display: false } }
             } 
         });
     }
@@ -500,7 +482,9 @@
             if (!groups.has(key)) groups.set(key, []);
             groups.get(key).push(it);
         }
-        let html = `<div class="mb-4"><h3 class="font-bold mb-2">${title}</h3>`;
+        if (items.length === 0) return `<div class="mb-4"><h3 class="font-bold mb-2 text-rose-700">${title}</h3><p class="text-sm text-slate-500">데이터가 없습니다.</p></div>`;
+
+        let html = `<div class="mb-4"><h3 class="font-bold mb-2 text-rose-700">${title}</h3>`;
         for (const [cat, rows] of groups.entries()) {
             const sub = rows.reduce((s, r) => s + r.금액, 0);
             html += `<div class="border rounded mb-2 overflow-hidden"><div class="p-2 bg-slate-50 text-sm flex justify-between font-bold"><span>${cat}</span><span>소계: ${fmtWon(sub)}</span></div><table class="w-full text-xs">`;
@@ -517,12 +501,14 @@
             if (!groups.has(key)) groups.set(key, []);
             groups.get(key).push(it);
         }
-        let html = `<div class="mb-4"><h3 class="font-bold mb-2">${title}</h3>`;
+        if (items.length === 0) return `<div class="mb-4"><h3 class="font-bold mb-2 text-sky-700">${title}</h3><p class="text-sm text-slate-500">데이터가 없습니다.</p></div>`;
+
+        let html = `<div class="mb-4"><h3 class="font-bold mb-2 text-sky-700">${title}</h3>`;
         for (const [cat, rows] of groups.entries()) {
             const sub = rows.reduce((s, r) => s + r.금액, 0);
             html += `<div class="border rounded mb-2 overflow-hidden"><div class="p-2 bg-slate-50 text-sm flex justify-between font-bold"><span>${cat}</span><span>소계: ${fmtWon(sub)}</span></div><table class="w-full text-xs">`;
             for (const r of rows) {
-                html += `<tr class="border-t"><td class="p-2 flex items-center gap-2"><input type="checkbox" class="asset-select" data-id="${r.id}" ${selectedSet.has(r.id)?'checked':''}>${r.상품명}</td><td class="p-2 text-right">${fmtWon(r.금액)}</td></tr>`;
+                html += `<tr class="border-t"><td class="p-2 flex items-center gap-2"><input type="checkbox" class="asset-select cursor-pointer" data-id="${r.id}" ${selectedSet.has(r.id)?'checked':''}>${r.상품명}</td><td class="p-2 text-right">${fmtWon(r.금액)}</td></tr>`;
             }
             html += `</table></div>`;
         }
@@ -558,7 +544,7 @@
                     maintainAspectRatio:false,
                     plugins: { 
                         tooltip: { callbacks: { label: function(ctx) { return `${ctx.dataset.label}: ${fmtWon(ctx.parsed.y)}`; } } },
-                        datalabels: { display: false } // 바 차트는 라벨 생략
+                        datalabels: { display: false } 
                     },
                     scales: { y: { ticks: { callback: function(val) { return (val/10000).toLocaleString() + '만'; } } } }
                 }
@@ -568,7 +554,6 @@
         renderCategoryTables('overall');
     }
 
-    // 🔥 수입/지출 표 하단에 총합 추가 + 파이 차트에 퍼센트 표시 기능 추가
     function renderCategoryTables(sm) {
         const container = document.getElementById('monthly-category-summary'); if (!container || !window.__cf) return;
         let iD, eD;
@@ -588,7 +573,6 @@
         const iDPairs = [...iD.entries()].sort((a,b)=>b[1]-a[1]);
         const eDPairs = [...eD.entries()].sort((a,b)=>b[1]-a[1]);
 
-        // 표를 그릴 때 하단에 총합(tfoot) 추가
         const createT = (title, pairs, color) => {
             const totalSum = pairs.reduce((sum, item) => sum + item[1], 0);
             return `
@@ -610,7 +594,6 @@
 
         container.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">${createT('수입 요약', iDPairs, 'text-emerald-600')}${createT('지출 요약', eDPairs, 'text-rose-600')}</div>`;
 
-        // 파이 차트 생성 로직
         if (window.Chart) {
             const canvasEl = document.getElementById('cfCat');
             if (canvasEl) {
@@ -657,7 +640,6 @@
                                     }
                                 }
                             },
-                            // 파이 차트 위에 퍼센트 직관적 표시
                             datalabels: {
                                 color: '#fff',
                                 font: { weight: 'bold', size: 11 },
@@ -665,7 +647,7 @@
                                     const total = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
                                     if(total === 0) return null;
                                     const pct = Math.round((value / total) * 100);
-                                    return pct >= 5 ? pct + '%' : null; // 너무 작은 조각(5% 미만)은 글씨를 숨김
+                                    return pct >= 5 ? pct + '%' : null; 
                                 }
                             }
                         },
@@ -705,17 +687,53 @@
         document.getElementById('transaction-modal').classList.remove('hidden');
     }
 
+    // 🔥 고유 이름이 반영된 드롭다운 생성
+    function updateFileSelectorUI() {
+        const fs = document.getElementById('file-selector');
+        if (!fs) return;
+        
+        if (window.__data && window.__data.fileNames && window.__data.fileNames.length > 1) {
+            let html = '<option value="all">전체 합산</option>';
+            window.__data.fileNames.forEach(fn => {
+                html += `<option value="${fn}">${fn}의 자산</option>`;
+            });
+            fs.innerHTML = html;
+            fs.classList.remove('hidden');
+        } else {
+            fs.classList.add('hidden');
+        }
+    }
+
+    // 🔥 드롭다운 선택 시 실행 (개별 파일 데이터만 필터링해서 렌더링)
     function renderAssetUpdatesOnly() {
         if (!window.__data) return;
-        const sel = window.__data.assets.filter(it => window.__data.selectedAssetIds.has(it.id));
-        renderSummary(sel, window.__data.liabilities, window.__isSharedUrlData);
-        renderCharts(sel, window.__data.liabilities);
-        const aTable = renderAssetGroupedTableWithCheckboxes('자산 현황', window.__data.assets, window.__data.selectedAssetIds);
-        const lTable = renderGroupedTable('부채 현황', window.__data.liabilities);
-        document.getElementById('result').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">${aTable}${lTable}</div>`;
+        
+        const fs = document.getElementById('file-selector');
+        const selectedFile = (fs && !fs.classList.contains('hidden')) ? fs.value : 'all';
+
+        let fAssets = window.__data.assets;
+        let fLiabs = window.__data.liabilities;
+
+        if (selectedFile !== 'all') {
+            fAssets = fAssets.filter(a => a.fileName === selectedFile);
+            fLiabs = fLiabs.filter(l => l.fileName === selectedFile);
+        }
+
+        const sel = fAssets.filter(it => window.__data.selectedAssetIds.has(it.id));
+        
+        renderSummary(sel, fLiabs, window.__isSharedUrlData);
+        renderCharts(sel, fLiabs);
+        
+        const titleSuffix = selectedFile === 'all' ? '(전체 합산)' : `(${selectedFile})`;
+        const aTable = renderAssetGroupedTableWithCheckboxes(`자산 현황 ${titleSuffix}`, fAssets, window.__data.selectedAssetIds);
+        const lTable = renderGroupedTable(`부채 현황 ${titleSuffix}`, fLiabs);
+        
+        // div로 각각 감싸주어 Grid가 깨지지 않게 방지
+        document.getElementById('result-tables').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div>${aTable}</div><div>${lTable}</div></div>`;
     }
 
     function renderAll() {
+        updateFileSelectorUI();
         renderAssetUpdatesOnly();
         if (window.__cf) { 
             renderCashflowSummary(window.__cf); 
@@ -735,7 +753,20 @@
         const btn = document.getElementById('exportBtn');
         try {
             btn.disabled = true; btn.innerText = "동기화 중...";
-            const payload = { data: { a: window.__data.assets, l: window.__data.liabilities, s: Array.from(window.__data.selectedAssetIds) }, cf: window.__cf ? { m: window.__cf.monthly, i: Array.from(window.__cf.incomeCategories), e: Array.from(window.__cf.expenseCategories) } : null, t: window.__transactions || [] };
+            const payload = { 
+                data: { 
+                    a: window.__data.assets, 
+                    l: window.__data.liabilities, 
+                    s: Array.from(window.__data.selectedAssetIds),
+                    f: window.__data.fileNames || [] 
+                }, 
+                cf: window.__cf ? { 
+                    m: window.__cf.monthly, 
+                    i: Array.from(window.__cf.incomeCategories), 
+                    e: Array.from(window.__cf.expenseCategories) 
+                } : null, 
+                t: window.__transactions || [] 
+            };
             const method = GIST_ID ? 'PATCH' : 'POST';
             const url = GIST_ID ? `https://api.github.com/gists/${GIST_ID}` : 'https://api.github.com/gists';
             
@@ -763,7 +794,12 @@
             const gist = await res.json();
             const payload = JSON.parse(gist.files['pingu_data.json'].content);
             window.__isSharedUrlData = true;
-            window.__data = { assets: payload.data.a, liabilities: payload.data.l, selectedAssetIds: new Set(payload.data.s) };
+            window.__data = { 
+                assets: payload.data.a, 
+                liabilities: payload.data.l, 
+                selectedAssetIds: new Set(payload.data.s),
+                fileNames: payload.data.f || []
+            };
             if (payload.cf) window.__cf = { monthly: payload.cf.m, incomeCategories: new Map(payload.cf.i), expenseCategories: new Map(payload.cf.e) };
             window.__transactions = payload.t;
             
@@ -782,24 +818,38 @@
             if (!f1 && !f2) throw new Error("파일을 하나 이상 선택하세요.");
             const files = [f1, f2].filter(Boolean);
             const pFS = [], pCF = [], allT = [];
-            for (let f of files) {
+            
+            for (let i = 0; i < files.length; i++) {
+                let f = files[i];
+                // 🔥 만약 파일 이름이 같더라도 완벽하게 구별되도록 앞에 [1], [2]를 강제 삽입
+                let uniqueName = files.length > 1 ? `[${i+1}] ${f.name}` : f.name;
+
                 const buf = await readFileAsArrayBuffer(f);
                 const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+                
                 const sFS = pickBangsaelSheet(wb, '뱅샐현황');
                 if (sFS) {
                     const rowsRaw = XLSX.utils.sheet_to_json(sFS, { header: 1, raw: true });
                     const rowsVal = XLSX.utils.sheet_to_json(sFS, { header: 1 });
-                    pFS.push(parseFinancialStatus(rowsRaw));
+                    pFS.push(parseFinancialStatus(rowsRaw, uniqueName));
                     const cfData = parseCashflowMatrix(rowsVal, 0, 500);
                     if (cfData) pCF.push(cfData);
                 }
+                
                 const sTX = pickBangsaelSheet(wb, '가계부 내역');
                 if (sTX) allT.push(...parseTransactions(XLSX.utils.sheet_to_json(sTX, { header: 1 })));
             }
+            
             let a = [], l = [];
             pFS.forEach(r => { if(r.assets) a = a.concat(r.assets); if(r.liabilities) l = l.concat(r.liabilities); });
             a.forEach((it, i) => it.id = 'A' + i);
-            window.__data = { assets: a, liabilities: l, selectedAssetIds: new Set(a.map(it => it.id)) };
+            
+            window.__data = { 
+                assets: a, 
+                liabilities: l, 
+                selectedAssetIds: new Set(a.map(it => it.id)),
+                fileNames: files.length > 1 ? files.map((f, i) => `[${i+1}] ${f.name}`) : files.map(f => f.name)
+            };
             window.__cf = mergeCashflowResults(pCF);
             window.__transactions = allT;
             
