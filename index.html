@@ -143,7 +143,6 @@
         <div class="p-6">
             <div id="tab-details" class="tab-content active">
                 <div class="flex justify-end mb-4">
-                    <!-- 🔥 onchange 이벤트를 직접 요소에 바인딩하여 100% 작동 보장 -->
                     <select id="file-selector" onchange="renderAssetUpdatesOnly()" class="hidden border border-slate-300 rounded px-3 py-1 font-semibold text-slate-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
                         <option value="all">전체 합산</option>
                     </select>
@@ -176,8 +175,7 @@
   </div>
 
   <script>
-    // ===== 🔥 중요: GitHub Gist 연동 설정 🔥 =====
-    const GITHUB_TOKEN = ""; // 👈 여기에 발급받은 ghp_... 토큰을 다시 입력해주세요.
+    const GITHUB_TOKEN = ""; 
     let GIST_ID = localStorage.getItem('pingu_gist_id') || "";
 
     if (window.Chart && window.ChartDataLabels) Chart.register(ChartDataLabels);
@@ -505,7 +503,8 @@
 
         let html = `<div class="mb-4"><h3 class="font-bold mb-2 text-sky-700">${title}</h3>`;
         for (const [cat, rows] of groups.entries()) {
-            const sub = rows.reduce((s, r) => s + r.금액, 0);
+            // 🔥 버그 수정: 소계(sub) 계산 시 체크된 항목의 금액만 합산하도록 변경
+            const sub = rows.reduce((s, r) => s + (selectedSet.has(r.id) ? r.금액 : 0), 0);
             html += `<div class="border rounded mb-2 overflow-hidden"><div class="p-2 bg-slate-50 text-sm flex justify-between font-bold"><span>${cat}</span><span>소계: ${fmtWon(sub)}</span></div><table class="w-full text-xs">`;
             for (const r of rows) {
                 html += `<tr class="border-t"><td class="p-2 flex items-center gap-2"><input type="checkbox" class="asset-select cursor-pointer" data-id="${r.id}" ${selectedSet.has(r.id)?'checked':''}>${r.상품명}</td><td class="p-2 text-right">${fmtWon(r.금액)}</td></tr>`;
@@ -687,7 +686,6 @@
         document.getElementById('transaction-modal').classList.remove('hidden');
     }
 
-    // 🔥 고유 이름이 반영된 드롭다운 생성
     function updateFileSelectorUI() {
         const fs = document.getElementById('file-selector');
         if (!fs) return;
@@ -704,7 +702,6 @@
         }
     }
 
-    // 🔥 드롭다운 선택 시 실행 (개별 파일 데이터만 필터링해서 렌더링)
     function renderAssetUpdatesOnly() {
         if (!window.__data) return;
         
@@ -728,7 +725,6 @@
         const aTable = renderAssetGroupedTableWithCheckboxes(`자산 현황 ${titleSuffix}`, fAssets, window.__data.selectedAssetIds);
         const lTable = renderGroupedTable(`부채 현황 ${titleSuffix}`, fLiabs);
         
-        // div로 각각 감싸주어 Grid가 깨지지 않게 방지
         document.getElementById('result-tables').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div>${aTable}</div><div>${lTable}</div></div>`;
     }
 
@@ -821,7 +817,6 @@
             
             for (let i = 0; i < files.length; i++) {
                 let f = files[i];
-                // 🔥 만약 파일 이름이 같더라도 완벽하게 구별되도록 앞에 [1], [2]를 강제 삽입
                 let uniqueName = files.length > 1 ? `[${i+1}] ${f.name}` : f.name;
 
                 const buf = await readFileAsArrayBuffer(f);
@@ -896,5 +891,3 @@
   </script>
 </body>
 </html>
-
-
