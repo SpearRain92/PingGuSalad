@@ -172,7 +172,7 @@
                         <h3 class="font-bold text-violet-800 flex items-center gap-2">
                             <span>🤖</span> AI 핑구의 맞춤형 재무 진단
                         </h3>
-                        <p class="text-xs text-slate-500 mt-1 mb-3">구글 Gemini API를 활용해 내 소비 패턴을 분석해줍니다. (서버 전송 없이 안전하게 처리됩니다)</p>
+                        <p class="text-xs text-slate-500 mt-1 mb-3">구글 Gemini API를 활용해 내 소비 패턴과 자산을 분석해줍니다. (서버 전송 없이 안전하게 처리됩니다)</p>
                         
                         <div class="flex items-center gap-2 mt-2 pt-3 border-t border-violet-200/50 flex-wrap">
                             <label class="text-sm font-bold text-violet-700 whitespace-nowrap" for="ai-target-month">분석 대상 월:</label>
@@ -189,7 +189,7 @@
 
                 <div id="ai-loading" class="hidden text-center py-10">
                     <svg class="animate-spin h-10 w-10 text-violet-500 mx-auto mb-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    <h3 class="text-violet-700 font-bold">AI 핑구가 가계부를 꼼꼼히 분석하고 있습니다...</h3>
+                    <h3 class="text-violet-700 font-bold">AI 핑구가 가계부와 자산을 꼼꼼히 분석하고 있습니다...</h3>
                     <p class="text-sm text-slate-500 mt-2">최대 10~15초 정도 소요될 수 있습니다.</p>
                 </div>
                 <div id="ai-report-container" class="hidden bg-white border-2 border-violet-200 rounded-xl p-4 sm:p-6 prose max-w-none shadow-sm">
@@ -243,7 +243,7 @@
     </div>
   </div>
 
-  <!-- 🔥 GitHub Token 전용 안전 모달 추가 (prompt 함수 차단 문제 해결) -->
+  <!-- GitHub Token 전용 안전 모달 -->
   <div id="github-token-modal" class="modal-overlay hidden">
     <div class="modal-content !max-w-md p-5 sm:p-6 mx-4">
         <h3 class="text-lg font-bold mb-2 flex items-center gap-2">☁️ GitHub 토큰 입력</h3>
@@ -814,25 +814,20 @@
 
     // ===== 🤖 AI Integration Logic =====
 
-    // 단일 월 선택 옵션 만들기
     function populateAIMonthSelectors() {
         if (!window.__cf || !window.__cf.monthly) return;
         const targetSel = document.getElementById('ai-target-month');
         if (!targetSel) return;
 
-        // 과거 월부터 최신 월 순으로 정렬
         const sortedMonths = [...window.__cf.monthly].map(m => m.ym).sort((a,b) => a.localeCompare(b));
-        
         if (sortedMonths.length === 0) return;
 
         let optionsHtml = '';
-        // 최신순으로 보여주기 위해 역순으로 옵션 생성
         [...sortedMonths].reverse().forEach(ym => {
             optionsHtml += `<option value="${ym}">${ym}</option>`;
         });
 
         targetSel.innerHTML = optionsHtml;
-        // 기본값: 가장 최신 월
         targetSel.value = sortedMonths[sortedMonths.length - 1];
     }
 
@@ -844,11 +839,22 @@
         const aSum = window.__data.assets.reduce((s, r) => s + r.금액, 0);
         const lSum = window.__data.liabilities.reduce((s, r) => s + r.금액, 0);
         
-        // 사용자가 선택한 분석 월 가져오기
+        // 현재 자산 중 유동성/놀고 있는 자금 추출 (입출금, 현금, 선불페이 등)
+        const idleAssets = window.__data.assets.filter(a => {
+            const cat = String(a.항목명 || '').toLowerCase();
+            const prod = String(a.상품명 || '').toLowerCase();
+            const isIdleCat = cat.includes('입출금') || cat.includes('현금') || cat.includes('선불') || cat.includes('페이');
+            const isIdleProd = prod.includes('입출금') || prod.includes('보통예금') || prod.includes('페이') || prod.includes('머니');
+            // 예적금이나 펀드, 주식 등은 제외
+            const isNotFixed = !prod.includes('적금') && !prod.includes('정기예금') && !prod.includes('청약') && !cat.includes('예/적금') && !cat.includes('투자');
+            return (isIdleCat || isIdleProd) && isNotFixed;
+        }).sort((a, b) => b.금액 - a.금액);
+        
+        const idleTotal = idleAssets.reduce((sum, a) => sum + a.금액, 0);
+
         const targetMonthVal = document.getElementById('ai-target-month').value;
         if (!targetMonthVal) return null;
 
-        // 월별 데이터를 과거부터 최신순으로 정렬
         const sortedMonthsAsc = [...cf.monthly].sort((a,b) => a.ym.localeCompare(b.ym));
         const targetIdx = sortedMonthsAsc.findIndex(m => m.ym === targetMonthVal);
         
@@ -860,7 +866,6 @@
         const targetMonthData = sortedMonthsAsc[targetIdx];
         const prevMonthData = targetIdx > 0 ? sortedMonthsAsc[targetIdx - 1] : null;
 
-        // 최근 6개월 데이터 계산 (선택한 월 포함, 최대 6개월 전까지)
         const startIdx6m = Math.max(0, targetIdx - 5);
         const sixMonthsData = sortedMonthsAsc.slice(startIdx6m, targetIdx + 1);
         const avg6mExpense = sixMonthsData.reduce((sum, m) => sum + m.expense, 0) / sixMonthsData.length;
@@ -874,6 +879,17 @@
         prompt += `- 총 부채: ${fmtWon(lSum)}\n`;
         prompt += `- 순 자산: ${fmtWon(aSum - lSum)}\n\n`;
 
+        prompt += `### [유동성/현금성 자산 (놀고 있을 가능성이 높은 여유 자금)]\n`;
+        prompt += `- 여유 자금 총합: ${fmtWon(idleTotal)}\n`;
+        if (idleAssets.length > 0) {
+            idleAssets.slice(0, 10).forEach(a => {
+                prompt += `  - ${a.항목명} | ${a.상품명}: ${fmtWon(a.금액)}\n`;
+            });
+        } else {
+            prompt += `- 해당되는 여유 자금 없음\n`;
+        }
+        prompt += `\n`;
+
         prompt += `### [분석 대상 월: ${periodLabel} 요약]\n`;
         prompt += `- 수입: ${fmtWon(targetMonthData.income)}\n`;
         prompt += `- 지출: ${fmtWon(targetMonthData.expense)}\n\n`;
@@ -886,11 +902,9 @@
         }
         prompt += `- 최근 6개월(해당 월 포함) 평균 지출: ${fmtWon(avg6mExpense)}\n\n`;
 
-        // 선택된 월의 지출 내역 (수입, 숨김 제외)
         const targetExpenses = txs.filter(tx => parseMonthLike(tx.date) === targetMonthVal && !tx.isHidden && tx.type !== '수입');
         const totalExpense = targetExpenses.reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0);
 
-        // 1. 카테고리별 지출 합계
         const catMap = new Map();
         targetExpenses.forEach(tx => catMap.set(tx.category, (catMap.get(tx.category) || 0) + Math.abs(tx.amount || 0)));
         const topCategories = [...catMap.entries()].sort((a,b) => b[1] - a[1]).slice(0, 10);
@@ -902,7 +916,6 @@
         });
         prompt += `\n`;
 
-        // 2. 주요 상세 지출 내역
         const bigSpends = targetExpenses.sort((a, b) => Math.abs(b.amount || 0) - Math.abs(a.amount || 0)).slice(0, 15);
         
         prompt += `### [${periodLabel} 주요 상세 결제 내역 Top 15]\n`;
@@ -911,8 +924,9 @@
         prompt += `\n위 데이터를 바탕으로 다음 가이드라인에 맞춰 리포트를 작성해줘:\n\n`;
         prompt += `1. **📊 전월 및 6개월 평균 대비 지출 분석:** ${periodLabel}의 지출을 전월 지출 및 최근 6개월 평균 지출과 비교해서, 소비가 늘었는지 줄었는지 객관적으로 평가하고 주요 원인(카테고리 비율 참고)을 분석해줘.\n`;
         prompt += `2. **🕵️‍♀️ 새는 돈(불필요 지출) 찾기:** 제공된 카테고리와 상세 결제 내역을 보고, 배달음식, 택시비, 충동구매, 잦은 카페 방문 등 줄일 수 있는 '낭비성 지출'이나 '위험 요소'를 날카롭게 짚어줘.\n`;
-        prompt += `3. **💡 핑구의 맞춤형 재무 팁:** 뻔한 소리 말고, 사용자의 실제 결제 내역에 기반한 현실적이고 구체적인 절약/자산관리 액션 플랜 2~3가지를 제시해줘.\n`;
-        prompt += `4. **💖 핑구의 응원 한마디:** 마지막으로 앞으로의 돈 관리를 독려하는 따뜻하고 긍정적인 응원을 남겨줘.\n\n`;
+        prompt += `3. **💸 놀고 있는 여유 자금 진단 및 활용 방안:** 제공된 '유동성/현금성 자산' 목록을 분석해서, 금리가 낮은 입출금/페이 통장에 너무 많은 돈이 방치되어 있지 않은지 진단해줘. 이 돈을 파킹통장, CMA, 예적금 등으로 어떻게 똑똑하게 굴리면 좋을지 실질적인 액션 플랜을 제안해줘.\n`;
+        prompt += `4. **💡 핑구의 맞춤형 재무 팁:** 뻔한 소리 말고, 사용자의 실제 결제 내역과 자산 상태에 기반한 현실적이고 구체적인 절약 및 자산관리 꿀팁 2~3가지를 제시해줘.\n`;
+        prompt += `5. **💖 핑구의 응원 한마디:** 마지막으로 앞으로의 돈 관리를 독려하는 따뜻하고 긍정적인 응원을 남겨줘.\n\n`;
         prompt += `*주의: 각 섹션은 이모지와 함께 명확한 헤딩(###)과 글머리 기호(-, 1. 등), 그리고 텍스트 강조(**)를 사용해서 모바일에서도 가독성 있게 렌더링되도록 해줘.*`;
 
         return prompt;
@@ -1020,7 +1034,6 @@
                 
                 const responseText = await fetchAIReport(apiKey, prompt);
                 
-                // 🔥 AI 리포트 결과를 전역 변수에 저장 (클라우드 동기화용)
                 window.__aiReport = responseText;
                 window.__aiReportMonth = targetMonthVal;
 
@@ -1042,7 +1055,6 @@
         }
     }
     
-    // 🔥 동기화된 AI 리포트가 있으면 화면에 복원해주는 함수
     function restoreAIReport() {
         if (window.__aiReport && window.__aiReportMonth) {
             const targetSel = document.getElementById('ai-target-month');
@@ -1061,13 +1073,12 @@
             renderCashflowSummary(window.__cf); 
             renderCashflowDetails(window.__cf); 
             populateAIMonthSelectors(); 
-            restoreAIReport(); // 동기화된 AI 리포트 화면 렌더링
+            restoreAIReport();
         }
     }
 
     // ===== 🚀 Sync & Load =====
     
-    // 🔥 prompt() 차단 문제를 우회하는 커스텀 모달 띄우기 함수
     function requestGithubToken() {
         return new Promise((resolve) => {
             const modal = document.getElementById('github-token-modal');
@@ -1104,7 +1115,6 @@
     async function syncToGist() {
         let localToken = localStorage.getItem('pingu_github_token') || GITHUB_TOKEN;
         if (!localToken) {
-            // 🔥 이제 prompt() 대신 자체 제작한 모달을 사용하여 토큰을 받습니다.
             localToken = await requestGithubToken();
             if (!localToken) { showMessage("안내", "토큰 입력 취소."); return; }
             localStorage.setItem('pingu_github_token', localToken.trim());
@@ -1114,7 +1124,6 @@
         try {
             btn.disabled = true; btn.innerText = "동기화 중...";
             
-            // 🔥 AI 리포트 내용을 페이로드에 함께 담아서 저장
             const payload = { 
                 data: { 
                     a: window.__data.assets, 
@@ -1174,7 +1183,6 @@
             if (payload.cf) window.__cf = { monthly: payload.cf.m, incomeCategories: new Map(payload.cf.i), expenseCategories: new Map(payload.cf.e) };
             window.__transactions = payload.t;
             
-            // 🔥 클라우드에서 AI 데이터 불러오기
             if (payload.ai) {
                 window.__aiReport = payload.ai.r;
                 window.__aiReportMonth = payload.ai.m;
@@ -1232,7 +1240,6 @@
             window.__cf = mergeCashflowResults(pCF);
             window.__transactions = allT;
             
-            // 🔥 새로운 파일을 업로드하면 기존 AI 리포트는 삭제
             window.__aiReport = null;
             window.__aiReportMonth = null;
             document.getElementById('ai-report-container').classList.add('hidden');
@@ -1281,5 +1288,4 @@
   </script>
 </body>
 </html>
-
 
